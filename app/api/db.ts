@@ -1,15 +1,19 @@
-import { sql } from '@vercel/postgres';
+import { Pool } from 'pg';
 
-const connectionString = process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL;
+const connectionString = process.env.POSTGRES_URL_NON_POOLING;
 
 if (!connectionString) {
-  throw new Error('POSTGRES_URL or POSTGRES_URL_NON_POOLING environment variable is not set');
+  throw new Error('POSTGRES_URL_NON_POOLING environment variable is not set');
 }
+
+const pool = new Pool({
+  connectionString,
+});
 
 export async function initializeDatabase() {
   try {
-    // Create tables using sql template tag
-    await sql`
+    // Create tables using pool.query
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
@@ -18,11 +22,11 @@ export async function initializeDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-      CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-      CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
-    `;
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);`);
 
-    await sql`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS spreadsheet_links (
         id SERIAL PRIMARY KEY,
         user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -34,10 +38,10 @@ export async function initializeDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id, sheet_url)
       );
-      CREATE INDEX IF NOT EXISTS idx_links_user_id ON spreadsheet_links(user_id);
-    `;
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_links_user_id ON spreadsheet_links(user_id);`);
 
-    await sql`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS sheet_data_cache (
         id SERIAL PRIMARY KEY,
         link_id INT NOT NULL REFERENCES spreadsheet_links(id) ON DELETE CASCADE,
@@ -45,10 +49,10 @@ export async function initializeDatabase() {
         cached_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         expires_at TIMESTAMP
       );
-      CREATE INDEX IF NOT EXISTS idx_cache_link_id ON sheet_data_cache(link_id);
-    `;
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_cache_link_id ON sheet_data_cache(link_id);`);
 
-    await sql`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS link_history (
         id SERIAL PRIMARY KEY,
         link_id INT NOT NULL REFERENCES spreadsheet_links(id) ON DELETE CASCADE,
@@ -57,8 +61,8 @@ export async function initializeDatabase() {
         new_value VARCHAR(500),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-      CREATE INDEX IF NOT EXISTS idx_history_link_id ON link_history(link_id);
-    `;
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_history_link_id ON link_history(link_id);`);
 
     console.log('[v0] Database initialized successfully');
   } catch (error) {
@@ -68,42 +72,42 @@ export async function initializeDatabase() {
 }
 
 export async function getUserById(userId: number) {
-  const result = await sql`SELECT * FROM users WHERE id = ${userId}`;
+  const result = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
   return result.rows;
 }
 
 export async function getUserByEmail(email: string) {
-  const result = await sql`SELECT * FROM users WHERE email = ${email}`;
+  const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
   return result.rows;
 }
 
 export async function createUser(email: string, name: string, googleId: string) {
-  const result = await sql`INSERT INTO users (email, name, google_id) VALUES (${email}, ${name}, ${googleId}) RETURNING *`;
+  const result = await pool.query('INSERT INTO users (email, name, google_id) VALUES ($1, $2, $3) RETURNING *', [email, name, googleId]);
   return result.rows;
 }
 
 export async function getSpreadsheetLinks(userId: number) {
-  const result = await sql`SELECT * FROM spreadsheet_links WHERE user_id = ${userId} ORDER BY created_at DESC`;
+  const result = await pool.query('SELECT * FROM spreadsheet_links WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
   return result.rows;
 }
 
 export async function addSpreadsheetLink(userId: number, sheetUrl: string, sheetName: string, sheetId?: string) {
-  const result = await sql`INSERT INTO spreadsheet_links (user_id, sheet_url, sheet_name, sheet_id) VALUES (${userId}, ${sheetUrl}, ${sheetName}, ${sheetId || null}) RETURNING *`;
+  const result = await pool.query('INSERT INTO spreadsheet_links (user_id, sheet_url, sheet_name, sheet_id) VALUES ($1, $2, $3, $4) RETURNING *', [userId, sheetUrl, sheetName, sheetId || null]);
   return result.rows;
 }
 
 export async function deleteSpreadsheetLink(linkId: number) {
-  const result = await sql`DELETE FROM spreadsheet_links WHERE id = ${linkId}`;
+  const result = await pool.query('DELETE FROM spreadsheet_links WHERE id = $1', [linkId]);
   return result.rows;
 }
 
 export async function cacheSheetData(linkId: number, data: any, expiresIn: number = 3600) {
   const expiresAt = new Date(Date.now() + expiresIn * 1000);
-  const result = await sql`INSERT INTO sheet_data_cache (link_id, data, expires_at) VALUES (${linkId}, ${JSON.stringify(data)}, ${expiresAt})`;
+  const result = await pool.query('INSERT INTO sheet_data_cache (link_id, data, expires_at) VALUES ($1, $2, $3)', [linkId, JSON.stringify(data), expiresAt]);
   return result.rows;
 }
 
 export async function getCachedSheetData(linkId: number) {
-  const result = await sql`SELECT data FROM sheet_data_cache WHERE link_id = ${linkId} AND expires_at > NOW() ORDER BY cached_at DESC LIMIT 1`;
+  const result = await pool.query('SELECT data FROM sheet_data_cache WHERE link_id = $1 AND expires_at > NOW() ORDER BY cached_at DESC LIMIT 1', [linkId]);
   return result.rows;
 }
