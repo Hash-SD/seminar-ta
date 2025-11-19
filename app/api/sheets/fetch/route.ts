@@ -1,6 +1,6 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { sql } from '@vercel/postgres';
+import { getLinkForUser, getCachedSheetData, updateLinkLastAccessed } from '@/app/api/db';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
@@ -11,35 +11,25 @@ export async function POST(request: NextRequest) {
   }
 
   const { linkId } = await request.json();
+  if (!linkId) {
+    return NextResponse.json({ error: 'Missing linkId' }, { status: 400 });
+  }
 
   try {
-    // Get link details
-    const linkResult = await sql`
-      SELECT sl.* FROM spreadsheet_links sl
-      JOIN users u ON sl.user_id = u.id
-      WHERE sl.id = ${linkId} AND u.email = ${session.user.email}
-    `;
+    const link = await getLinkForUser(linkId, session.user.email);
 
-    if (linkResult.rows.length === 0) {
+    if (!link) {
       return NextResponse.json({ error: 'Link not found' }, { status: 404 });
     }
 
-    const link = linkResult.rows[0];
-
-    const cacheResult = await sql`
-      SELECT data FROM sheet_data_cache 
-      WHERE link_id = ${linkId} AND expires_at > NOW() 
-      ORDER BY cached_at DESC LIMIT 1
-    `;
+    const cachedData = await getCachedSheetData(linkId);
 
     let todayData = [];
-    if (cacheResult.rows.length > 0) {
-      todayData = cacheResult.rows[0].data.values || [];
+    if (cachedData.length > 0) {
+      todayData = cachedData[0].data.values || [];
     }
 
-    await sql`
-      UPDATE spreadsheet_links SET last_accessed = CURRENT_TIMESTAMP WHERE id = ${linkId}
-    `;
+    await updateLinkLastAccessed(linkId);
 
     return NextResponse.json({
       data: todayData,

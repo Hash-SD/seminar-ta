@@ -1,6 +1,6 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { sql } from '@vercel/postgres';
+import { deleteLinkForUser } from '@/app/api/db';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function DELETE(
@@ -13,19 +13,17 @@ export async function DELETE(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  try {
-    const linkResult = await sql`
-      SELECT sl.id FROM spreadsheet_links sl
-      JOIN users u ON sl.user_id = u.id
-      WHERE sl.id = ${params.id} AND u.email = ${session.user.email}
-    `;
+  const linkId = parseInt(params.id, 10);
+  if (isNaN(linkId)) {
+    return NextResponse.json({ error: 'Invalid link ID' }, { status: 400 });
+  }
 
-    if (linkResult.rows.length === 0) {
+  try {
+    const deletedCount = await deleteLinkForUser(linkId, session.user.email);
+
+    if (deletedCount === 0) {
       return NextResponse.json({ error: 'Link not found or unauthorized' }, { status: 404 });
     }
-
-    // Delete link (cascade will handle related records)
-    await sql`DELETE FROM spreadsheet_links WHERE id = ${params.id}`;
 
     return NextResponse.json({ success: true });
   } catch (error) {
