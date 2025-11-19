@@ -1,6 +1,6 @@
 import NextAuth, { type NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
-import { sql } from '@vercel/postgres';
+import { upsertUser } from '@/app/api/db';
 
 if (!process.env.NEXTAUTH_GOOGLE_ID || !process.env.NEXTAUTH_GOOGLE_SECRET) {
   throw new Error('Missing Google OAuth environment variables: NEXTAUTH_GOOGLE_ID and NEXTAUTH_GOOGLE_SECRET');
@@ -20,21 +20,22 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user, account }) {
       try {
-        if (!user.email?.endsWith('@student.itera.ac.id')) {
+        if (!user.email || !user.name || !account?.providerAccountId) {
+          console.error('[v0] Missing user information for sign in.');
+          return false;
+        }
+
+        if (!user.email.endsWith('@student.itera.ac.id')) {
           console.log('[v0] Invalid email domain:', user.email);
           return false;
         }
 
         try {
-          await sql`
-            INSERT INTO users (email, google_id, name)
-            VALUES (${user.email}, ${account?.providerAccountId}, ${user.name})
-            ON CONFLICT (google_id) DO UPDATE SET 
-            updated_at = CURRENT_TIMESTAMP,
-            name = EXCLUDED.name
-          `;
+          await upsertUser(user.email, account.providerAccountId, user.name);
         } catch (dbError) {
-          console.log('[v0] Database insert error:', dbError);
+          console.log('[v0] Database upsert error:', dbError);
+          // Allow sign-in to proceed even if the database write fails,
+          // as the user is authenticated with Google.
           return true;
         }
         

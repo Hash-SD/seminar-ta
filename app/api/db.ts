@@ -1,9 +1,9 @@
 import { Pool } from 'pg';
 
-const connectionString = process.env.POSTGRES_URL;
+const connectionString = process.env.POSTGRES_URL_NON_POOLING;
 
 if (!connectionString) {
-  throw new Error('POSTGRES_URL environment variable is not set');
+  throw new Error('POSTGRES_URL_NON_POOLING environment variable is not set');
 }
 
 const pool = new Pool({
@@ -110,4 +110,66 @@ export async function cacheSheetData(linkId: number, data: any, expiresIn: numbe
 export async function getCachedSheetData(linkId: number) {
   const result = await pool.query('SELECT data FROM sheet_data_cache WHERE link_id = $1 AND expires_at > NOW() ORDER BY cached_at DESC LIMIT 1', [linkId]);
   return result.rows;
+}
+
+export async function upsertUser(email: string, googleId: string, name: string) {
+  const result = await pool.query(`
+    INSERT INTO users (email, google_id, name)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (google_id) DO UPDATE SET
+    updated_at = CURRENT_TIMESTAMP,
+    name = EXCLUDED.name
+    RETURNING *
+  `, [email, googleId, name]);
+  return result.rows;
+}
+
+export async function getLinksByUserEmail(email: string) {
+  const result = await pool.query(`
+    SELECT sl.* FROM spreadsheet_links sl
+    JOIN users u ON sl.user_id = u.id
+    WHERE u.email = $1
+    ORDER BY sl.updated_at DESC
+  `, [email]);
+  return result.rows;
+}
+
+export async function upsertLink(userId: number, sheetUrl: string, sheetName: string) {
+  const result = await pool.query(`
+    INSERT INTO spreadsheet_links (user_id, sheet_url, sheet_name)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (user_id, sheet_url) DO UPDATE
+    SET sheet_name = $3, updated_at = CURRENT_TIMESTAMP
+    RETURNING *
+  `, [userId, sheetUrl, sheetName]);
+  return result.rows[0];
+}
+
+export async function createLinkHistory(linkId: number, action: string, newValue: string) {
+  await pool.query(`
+    INSERT INTO link_history (link_id, action, new_value)
+    VALUES ($1, $2, $3)
+  `, [linkId, action, newValue]);
+}
+
+export async function deleteLinkForUser(linkId: number, email: string) {
+  const result = await pool.query(`
+    DELETE FROM spreadsheet_links
+    WHERE id = $1 AND user_id = (SELECT id FROM users WHERE email = $2)
+    RETURNING id
+  `, [linkId, email]);
+  return result.rowCount;
+}
+
+export async function getLinkForUser(linkId: number, email: string) {
+  const result = await pool.query(`
+    SELECT sl.* FROM spreadsheet_links sl
+    JOIN users u ON sl.user_id = u.id
+    WHERE sl.id = $1 AND u.email = $2
+  `, [linkId, email]);
+  return result.rows[0];
+}
+
+export async function updateLinkLastAccessed(linkId: number) {
+  await pool.query('UPDATE spreadsheet_links SET last_accessed = CURRENT_TIMESTAMP WHERE id = $1', [linkId]);
 }
