@@ -1,7 +1,9 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { deleteLinkForUser } from '@/app/api/db';
+import { deleteLinkForUser, getLinkForUser } from '@/app/api/db';
 import { NextRequest, NextResponse } from 'next/server';
+
+export const runtime = 'nodejs';
 
 export async function DELETE(
   request: NextRequest,
@@ -19,11 +21,13 @@ export async function DELETE(
   }
 
   try {
-    const deletedCount = await deleteLinkForUser(linkId, session.user.email);
+    const link = await getLinkForUser(linkId, session.user.email);
 
-    if (deletedCount === 0) {
+    if (!link) {
       return NextResponse.json({ error: 'Link not found or unauthorized' }, { status: 404 });
     }
+
+    await deleteLinkForUser(linkId, session.user.email);
 
     return NextResponse.json({ success: true });
   } catch (error) {

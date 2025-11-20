@@ -3,6 +3,8 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { getLinksByUserEmail, getUserByEmail, upsertLink, createLinkHistory } from '@/app/api/db';
 import { NextRequest, NextResponse } from 'next/server';
 
+export const runtime = 'nodejs';
+
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
   

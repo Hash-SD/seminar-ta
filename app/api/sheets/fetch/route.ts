@@ -3,6 +3,8 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { getLinkForUser, getCachedSheetData, updateLinkLastAccessed } from '@/app/api/db';
 import { NextRequest, NextResponse } from 'next/server';
 
+export const runtime = 'nodejs';
+
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   
@@ -11,8 +13,8 @@ export async function POST(request: NextRequest) {
   }
 
   const { linkId } = await request.json();
-  if (!linkId) {
-    return NextResponse.json({ error: 'Missing linkId' }, { status: 400 });
+  if (isNaN(linkId)) {
+    return NextResponse.json({ error: 'Invalid link ID' }, { status: 400 });
   }
 
   try {
@@ -21,12 +23,13 @@ export async function POST(request: NextRequest) {
     if (!link) {
       return NextResponse.json({ error: 'Link not found' }, { status: 404 });
     }
-
+    
     const cachedData = await getCachedSheetData(linkId);
 
     let todayData = [];
     if (cachedData.length > 0) {
-      todayData = cachedData[0].data.values || [];
+        // Assuming the 'data' column is a JSON object with a 'values' key
+        todayData = cachedData[0].data.values || [];
     }
 
     await updateLinkLastAccessed(linkId);

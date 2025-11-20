@@ -10,6 +10,8 @@ if (!process.env.NEXTAUTH_SECRET) {
   throw new Error('Missing NEXTAUTH_SECRET environment variable');
 }
 
+export const runtime = 'nodejs';
+
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
@@ -20,22 +22,17 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user, account }) {
       try {
-        if (!user.email || !user.name || !account?.providerAccountId) {
-          console.error('[v0] Missing user information for sign in.');
-          return false;
-        }
-
-        if (!user.email.endsWith('@student.itera.ac.id')) {
+        if (!user.email?.endsWith('@student.itera.ac.id')) {
           console.log('[v0] Invalid email domain:', user.email);
           return false;
         }
 
         try {
-          await upsertUser(user.email, account.providerAccountId, user.name);
+            if (user.email && account?.providerAccountId && user.name) {
+                await upsertUser(user.email, account.providerAccountId, user.name);
+            }
         } catch (dbError) {
-          console.log('[v0] Database upsert error:', dbError);
-          // Allow sign-in to proceed even if the database write fails,
-          // as the user is authenticated with Google.
+          console.log('[v0] Database insert error:', dbError);
           return true;
         }
         
