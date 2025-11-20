@@ -7,15 +7,25 @@ import { filterDataForUpcomingWeek } from '@/lib/date-filter';
 
 export const runtime = 'nodejs';
 
-// Helper to convert column letter (e.g., 'A', 'AA') to 0-based index
-function columnLetterToIndex(letter: string): number {
-    if (!letter) return -1;
+// Helper to parse cell reference (e.g. A1, C5) -> { col: 0, row: 0 }
+function parseCellReference(cellRef: string): { col: number, row: number } | null {
+    if (!cellRef) return null;
+
+    const match = cellRef.trim().toUpperCase().match(/^([A-Z]+)([0-9]+)$/);
+    if (!match) return null;
+
+    const letter = match[1];
+    const number = parseInt(match[2]);
+
     let column = 0;
-    const cleanLetter = letter.trim().toUpperCase();
-    for (let i = 0; i < cleanLetter.length; i++) {
-        column += (cleanLetter.charCodeAt(i) - 64) * Math.pow(26, cleanLetter.length - i - 1);
+    for (let i = 0; i < letter.length; i++) {
+        column += (letter.charCodeAt(i) - 64) * Math.pow(26, letter.length - i - 1);
     }
-    return column - 1;
+
+    return {
+        col: column - 1, // 0-based
+        row: number - 1  // 0-based
+    };
 }
 
 // Helper to fetch data for a specific link
@@ -52,7 +62,6 @@ async function fetchAndProcessLink(link: any) {
                         range: `${tab}!A:Z`,
                     });
                     if (response.data.values) {
-                        // Naive concat, assumes similar structure or we filter later
                         sheetValues = [...sheetValues, ...response.data.values];
                     }
                  } catch (e) {
@@ -62,12 +71,10 @@ async function fetchAndProcessLink(link: any) {
 
             // Cache the raw data
             if (sheetValues.length > 0) {
-                // Determine cache duration
                 const config = link.configuration || {};
-                let ttl = 300; // Default 5 minutes
+                let ttl = 300;
 
                 if (config.auto_refresh && config.refresh_interval) {
-                    // Convert minutes to seconds
                     ttl = config.refresh_interval * 60;
                 }
 
@@ -83,33 +90,78 @@ async function fetchAndProcessLink(link: any) {
     // Filter and Map Data
     const config = link.configuration || {};
     const colMap = config.columns || {};
-    const headerRowIndex = (config.header_row || 1) - 1; // 0-based index
 
-    if (sheetValues.length <= headerRowIndex) return [];
+    // 1. Parse all cell references to determine indices and Max Header Row
+    const attributes = ['Nama', 'Judul', 'Tanggal', 'Jam', 'Ruangan'];
+    let maxHeaderRow = 0;
+    const mapConfig: any = {};
 
-    // Convert mapped Letters (A, B) to Indices (0, 1)
-    const indices = {
-        nama: columnLetterToIndex(colMap.Nama),
-        judul: columnLetterToIndex(colMap.Judul),
-        tanggal: columnLetterToIndex(colMap.Tanggal),
-        jam: columnLetterToIndex(colMap.Jam),
-        ruangan: columnLetterToIndex(colMap.Ruangan),
-    };
+    attributes.forEach(attr => {
+        const entry = colMap[attr];
+        // Entry can be object { cell: "A1", label: "..." } or string "A" (legacy support if needed, but we migrated)
+        // We'll assume new structure or fallback
+        let cellRef = '';
+        let label = '';
 
-    // Data rows start AFTER the header row
-    const dataRows = sheetValues.slice(headerRowIndex + 1);
+        if (typeof entry === 'object' && entry !== null) {
+             cellRef = entry.cell || '';
+             label = entry.label || '';
+        } else if (typeof entry === 'string') {
+             // Legacy fallback? Or user just entered "A".
+             // If "A" (no number), parseCellReference returns null.
+             // Let's assume if it's just letter, row is 0 (A1).
+             if (entry.match(/^[A-Z]+$/)) {
+                 cellRef = entry + '1';
+             } else {
+                 cellRef = entry;
+             }
+        }
 
-    // Use the new "Upcoming Week" filter logic
-    const filteredRows = filterDataForUpcomingWeek(dataRows, indices.tanggal);
+        const parsed = parseCellReference(cellRef);
+        if (parsed) {
+            if (parsed.row > maxHeaderRow) maxHeaderRow = parsed.row;
+            mapConfig[attr] = {
+                colIndex: parsed.col,
+                label: label || attr // Default to key if no label
+            };
+        } else {
+            mapConfig[attr] = { colIndex: -1, label: attr };
+        }
+    });
 
-    // Map the rows to the standard object structure
-    const mappedData = filteredRows.map((row: any[]) => ({
-        Nama: indices.nama !== -1 && row[indices.nama] ? row[indices.nama] : '',
-        Judul: indices.judul !== -1 && row[indices.judul] ? row[indices.judul] : '',
-        Tanggal: indices.tanggal !== -1 && row[indices.tanggal] ? row[indices.tanggal] : '',
-        Jam: indices.jam !== -1 && row[indices.jam] ? row[indices.jam] : '',
-        Ruangan: indices.ruangan !== -1 && row[indices.ruangan] ? row[indices.ruangan] : '',
-    }));
+    // 2. Check if we have enough data
+    // Data starts AFTER the max header row
+    if (sheetValues.length <= maxHeaderRow) return [];
+
+    const dataRows = sheetValues.slice(maxHeaderRow + 1);
+
+    // 3. Filter
+    const filteredRows = filterDataForUpcomingWeek(dataRows, mapConfig['Tanggal']?.colIndex);
+
+    // 4. Map
+    const mappedData = filteredRows.map((row: any[]) => {
+        const item: any = {};
+        attributes.forEach(attr => {
+            const idx = mapConfig[attr].colIndex;
+            item[attr] = (idx !== -1 && row[idx]) ? row[idx] : '';
+        });
+        // Also attach labels metadata?
+        // We return array of objects. We can't attach metadata easily to the array itself in JSON response unless we wrap it.
+        // But `fetchAndProcessLink` returns just the array.
+        // We can embed the label in the object? e.g. `_label_Nama`: "Student".
+        // Or we rely on the API wrapper to provide labels?
+        // Let's add `_labels` property to the first item? No that's messy.
+        // Let's add a hidden property or just rely on the frontend not knowing labels for now?
+        // The requirement was "bisa di custom pembacaannya" (reading can be customized).
+        // The user inputs the Label. We should send it.
+        // Let's attach `_labels` to EVERY item. Redundant but safe.
+        // Or better: The GET response structure can handle it.
+        item._labels = {};
+        attributes.forEach(attr => {
+             item._labels[attr] = mapConfig[attr].label;
+        });
+        return item;
+    });
 
     return mappedData;
 }

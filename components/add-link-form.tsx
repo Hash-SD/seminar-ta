@@ -17,14 +17,22 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
   const [loading, setLoading] = useState(false);
   const [sheetUrl, setSheetUrl] = useState('');
   const [sheetName, setSheetName] = useState('');
-  const [headerRow, setHeaderRow] = useState('1');
 
-  // Column Mapping State (Now storing Letters e.g., A, B)
+  // Column Mapping State (Cell References e.g., A1, C5)
   const [colNama, setColNama] = useState('');
+  const [labelNama, setLabelNama] = useState('');
+
   const [colJudul, setColJudul] = useState('');
+  const [labelJudul, setLabelJudul] = useState('');
+
   const [colTanggal, setColTanggal] = useState('');
+  const [labelTanggal, setLabelTanggal] = useState('');
+
   const [colJam, setColJam] = useState('');
+  const [labelJam, setLabelJam] = useState('');
+
   const [colRuangan, setColRuangan] = useState('');
+  const [labelRuangan, setLabelRuangan] = useState('');
 
   // Auto Refresh State
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -42,13 +50,12 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
           sheet_url: sheetUrl,
           sheet_name: sheetName,
           configuration: {
-             header_row: parseInt(headerRow) || 1,
              columns: {
-                Nama: colNama,
-                Judul: colJudul,
-                Tanggal: colTanggal,
-                Jam: colJam,
-                Ruangan: colRuangan
+                Nama: { cell: colNama, label: labelNama },
+                Judul: { cell: colJudul, label: labelJudul },
+                Tanggal: { cell: colTanggal, label: labelTanggal },
+                Jam: { cell: colJam, label: labelJam },
+                Ruangan: { cell: colRuangan, label: labelRuangan }
              },
              auto_refresh: autoRefresh,
              refresh_interval: parseInt(refreshInterval)
@@ -68,12 +75,11 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
       // Reset form
       setSheetUrl('');
       setSheetName('');
-      setHeaderRow('1');
-      setColNama('');
-      setColJudul('');
-      setColTanggal('');
-      setColJam('');
-      setColRuangan('');
+      setColNama(''); setLabelNama('');
+      setColJudul(''); setLabelJudul('');
+      setColTanggal(''); setLabelTanggal('');
+      setColJam(''); setLabelJam('');
+      setColRuangan(''); setLabelRuangan('');
       setAutoRefresh(false);
       setRefreshInterval('60');
 
@@ -109,28 +115,15 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <Label className="mb-1">Sheet Tab Name</Label>
-                    <Input
-                        type="text"
-                        placeholder="e.g., Sheet1"
-                        value={sheetName}
-                        onChange={(e) => setSheetName(e.target.value)}
-                        required
-                    />
-                </div>
-                <div>
-                    <Label className="mb-1">Header Row Number</Label>
-                    <Input
-                        type="number"
-                        min="1"
-                        placeholder="1"
-                        value={headerRow}
-                        onChange={(e) => setHeaderRow(e.target.value)}
-                        required
-                    />
-                </div>
+            <div>
+                <Label className="mb-1">Sheet Tab Name</Label>
+                <Input
+                    type="text"
+                    placeholder="e.g., Sheet1"
+                    value={sheetName}
+                    onChange={(e) => setSheetName(e.target.value)}
+                    required
+                />
             </div>
 
             <div className="flex items-center space-x-2">
@@ -162,56 +155,66 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
         </div>
 
         <div className="space-y-4">
-            <h3 className="text-lg font-medium">Column Mapping (Excel Format)</h3>
+            <h3 className="text-lg font-medium">Column Mapping (Excel Coordinates)</h3>
             <p className="text-sm text-muted-foreground">
-                Enter the Column Letter (e.g., A, B, C) for each attribute.
+                Enter the Header Cell (e.g. <strong>A1, C5</strong>) for each attribute.
+                You can also customize the display label.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                    <Label>Column for "Nama"</Label>
-                    <Input
-                        placeholder="e.g. A"
-                        value={colNama}
-                        onChange={(e) => setColNama(e.target.value)}
-                        required
-                    />
+            <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                     <div className="space-y-1">
+                        <Label>Cell for "Nama"</Label>
+                        <Input placeholder="e.g. A1" value={colNama} onChange={(e) => setColNama(e.target.value)} required />
+                     </div>
+                     <div className="space-y-1">
+                        <Label>Custom Label (Optional)</Label>
+                        <Input placeholder="e.g. Mahasiswa" value={labelNama} onChange={(e) => setLabelNama(e.target.value)} />
+                     </div>
                 </div>
-                <div>
-                    <Label>Column for "Judul"</Label>
-                    <Input
-                        placeholder="e.g. B"
-                        value={colJudul}
-                        onChange={(e) => setColJudul(e.target.value)}
-                        required
-                    />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                     <div className="space-y-1">
+                        <Label>Cell for "Judul"</Label>
+                        <Input placeholder="e.g. B1" value={colJudul} onChange={(e) => setColJudul(e.target.value)} required />
+                     </div>
+                     <div className="space-y-1">
+                        <Label>Custom Label (Optional)</Label>
+                        <Input placeholder="e.g. Topik TA" value={labelJudul} onChange={(e) => setLabelJudul(e.target.value)} />
+                     </div>
                 </div>
-                 <div>
-                    <Label>Column for "Tanggal"</Label>
-                    <Input
-                        placeholder="e.g. C"
-                        value={colTanggal}
-                        onChange={(e) => setColTanggal(e.target.value)}
-                        required
-                    />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                     <div className="space-y-1">
+                        <Label>Cell for "Tanggal"</Label>
+                        <Input placeholder="e.g. C1" value={colTanggal} onChange={(e) => setColTanggal(e.target.value)} required />
+                     </div>
+                     <div className="space-y-1">
+                        <Label>Custom Label (Optional)</Label>
+                        <Input placeholder="e.g. Jadwal" value={labelTanggal} onChange={(e) => setLabelTanggal(e.target.value)} />
+                     </div>
                 </div>
-                 <div>
-                    <Label>Column for "Jam"</Label>
-                    <Input
-                        placeholder="e.g. D"
-                        value={colJam}
-                        onChange={(e) => setColJam(e.target.value)}
-                        required
-                    />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                     <div className="space-y-1">
+                        <Label>Cell for "Jam"</Label>
+                        <Input placeholder="e.g. D1" value={colJam} onChange={(e) => setColJam(e.target.value)} required />
+                     </div>
+                     <div className="space-y-1">
+                        <Label>Custom Label (Optional)</Label>
+                        <Input placeholder="e.g. Waktu" value={labelJam} onChange={(e) => setLabelJam(e.target.value)} />
+                     </div>
                 </div>
-                 <div>
-                    <Label>Column for "Ruangan"</Label>
-                    <Input
-                        placeholder="e.g. E"
-                        value={colRuangan}
-                        onChange={(e) => setColRuangan(e.target.value)}
-                        required
-                    />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                     <div className="space-y-1">
+                        <Label>Cell for "Ruangan"</Label>
+                        <Input placeholder="e.g. E1" value={colRuangan} onChange={(e) => setColRuangan(e.target.value)} required />
+                     </div>
+                     <div className="space-y-1">
+                        <Label>Custom Label (Optional)</Label>
+                        <Input placeholder="e.g. Lokasi" value={labelRuangan} onChange={(e) => setLabelRuangan(e.target.value)} />
+                     </div>
                 </div>
             </div>
         </div>

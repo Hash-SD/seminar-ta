@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Search, MapPin, User, Clock, CalendarDays } from 'lucide-react';
-import { parseFlexibleDate } from '@/lib/date-filter'; // We might need a client-side friendly version or just use string sorting
 
 interface ScheduleItem {
   Nama: string;
@@ -13,6 +12,7 @@ interface ScheduleItem {
   Jam: string;
   Ruangan: string;
   source: string;
+  _labels?: Record<string, string>;
 }
 
 interface PublicScheduleViewerProps {
@@ -55,35 +55,6 @@ export default function PublicScheduleViewer({ links }: PublicScheduleViewerProp
     );
   });
 
-  // Group by Date
-  // Since we don't have the helper client side easily unless we duplicate logic or import from a shared utils file that is client safe.
-  // lib/date-filter.ts uses date-fns, which is safe.
-  // But importing server code in client component might fail if it imports 'fs' etc. date-fns is fine.
-  // Let's try simple grouping by the string value first? No, "17 November" vs "Senin, 17 Nov"
-  // Ideally backend normalizes the date string?
-  // The API returns 'Tanggal' as the string from the sheet.
-
-  // Let's normalize and group client side for "Lebih Bagus" UI
-  const groupedData: Record<string, ScheduleItem[]> = {};
-
-  filteredData.forEach(item => {
-      // We use the raw string as key, but maybe we should try to parse it to sort?
-      // For now, let's just group by the exact string to avoid splitting "Same day different format".
-      // Actually, mixing formats is bad.
-      // Let's assume the data is relatively clean or we just list them.
-      // Ideally we sort by date.
-      const key = item.Tanggal || 'Lainnya';
-      if (!groupedData[key]) groupedData[key] = [];
-      groupedData[key].push(item);
-  });
-
-  // Sort keys? This is hard with arbitrary strings without parsing.
-  // Let's just display them as they come or maybe just a grid is fine?
-  // The prompt asked for "Kembangkan lagi agar lebih bagus".
-  // Grouping by date header is a classic schedule view.
-
-  const sortedKeys = Object.keys(groupedData).sort(); // Alphabetical sort isn't great for dates.
-
   if (loading) {
     return (
         <div className="flex flex-col items-center justify-center py-20 space-y-4">
@@ -123,62 +94,75 @@ export default function PublicScheduleViewer({ links }: PublicScheduleViewerProp
         )}
       </div>
 
-      {/* Display Grouped Data */}
-      {Object.keys(groupedData).length > 0 ? (
-          <div className="space-y-8">
-            {/* If we can't sort effectively, maybe just one big grid is safer to avoid "Monday" appearing after "Tuesday" alphabetically
-                But let's try to just show them in the order they appeared?
-                Or revert to simple grid if grouping is messy.
-                Let's stick to Grid but maybe with section headers if we had valid dates.
-                Given the ambiguity of formats, a Grid is safer than a sorted list that is sorted wrong.
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {filteredData.map((item, index) => {
+            const labels = item._labels || {};
+            return (
+            <Card key={index} className="flex flex-col p-5 hover:shadow-md transition-shadow border-l-4 border-l-primary group">
+                <div className="mb-4">
+                     <div className="flex justify-between items-start mb-2">
+                        <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                            {/* Maybe show custom label here if it differs? No, date is date. */}
+                            {item.Tanggal}
+                        </span>
+                     </div>
 
-                Let's keep the Grid view but improved card design.
-            */}
-             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {filteredData.map((item, index) => (
-                    <Card key={index} className="flex flex-col p-5 hover:shadow-md transition-shadow border-l-4 border-l-primary group">
-                        <div className="mb-4">
-                             <div className="flex justify-between items-start mb-2">
-                                <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
-                                    {item.Tanggal}
-                                </span>
-                             </div>
-                            <h3 className="font-bold text-lg line-clamp-2 text-primary mb-1 group-hover:text-blue-600 transition-colors" title={item.Judul}>
-                                {item.Judul || 'Judul Tidak Tersedia'}
-                            </h3>
-                            <div className="flex items-center text-sm text-muted-foreground mt-2">
-                                <User className="h-4 w-4 mr-2" />
-                                <span className="font-medium text-foreground">{item.Nama}</span>
+                    {/* Title Section - Uses 'Judul' */}
+                    <div>
+                         <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                             {labels.Judul || 'Judul'}
+                         </span>
+                        <h3 className="font-bold text-lg line-clamp-2 text-primary mb-1 group-hover:text-blue-600 transition-colors" title={item.Judul}>
+                            {item.Judul || 'Tidak Tersedia'}
+                        </h3>
+                    </div>
+
+                    {/* Name Section - Uses 'Nama' */}
+                    <div className="flex items-center text-sm text-muted-foreground mt-3">
+                        <User className="h-4 w-4 mr-2 shrink-0" />
+                        <div className="flex flex-col">
+                             <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
+                                 {labels.Nama || 'Mahasiswa'}
+                             </span>
+                             <span className="font-medium text-foreground">{item.Nama}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-auto space-y-3 pt-3 border-t border-border/50">
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="flex items-center text-muted-foreground">
+                            <Clock className="h-4 w-4 mr-2 text-blue-500 shrink-0" />
+                            <div className="flex flex-col">
+                                 <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
+                                     {labels.Jam || 'Waktu'}
+                                 </span>
+                                <span>{item.Jam || '-'}</span>
                             </div>
                         </div>
-
-                        <div className="mt-auto space-y-3 pt-3 border-t border-border/50">
-                            <div className="grid grid-cols-2 gap-2 text-sm">
-                                <div className="flex items-center text-muted-foreground">
-                                    <Clock className="h-4 w-4 mr-2 text-blue-500" />
-                                    <span>{item.Jam || '-'}</span>
-                                </div>
-                                <div className="flex items-center text-muted-foreground">
-                                    <MapPin className="h-4 w-4 mr-2 text-red-500" />
-                                    <span className="font-semibold">{item.Ruangan || '-'}</span>
-                                </div>
-                            </div>
-                            <div className="text-xs text-muted-foreground text-right">
-                                Source: {item.source}
+                        <div className="flex items-center text-muted-foreground">
+                            <MapPin className="h-4 w-4 mr-2 text-red-500 shrink-0" />
+                             <div className="flex flex-col">
+                                 <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
+                                     {labels.Ruangan || 'Ruangan'}
+                                 </span>
+                                <span className="font-semibold">{item.Ruangan || '-'}</span>
                             </div>
                         </div>
-                    </Card>
-                ))}
-            </div>
+                    </div>
+                    <div className="text-xs text-muted-foreground text-right">
+                        Source: {item.source}
+                    </div>
+                </div>
+            </Card>
+        )})}
+      </div>
+
+      {filteredData.length === 0 && searchTerm && (
+          <div className="text-center py-10">
+              <p className="text-muted-foreground">Tidak ditemukan jadwal yang cocok dengan "{searchTerm}"</p>
           </div>
-      ) : (
-         searchTerm && (
-            <div className="text-center py-10">
-                <p className="text-muted-foreground">Tidak ditemukan jadwal yang cocok dengan "{searchTerm}"</p>
-            </div>
-         )
       )}
-
     </div>
   );
 }
