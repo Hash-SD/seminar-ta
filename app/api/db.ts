@@ -137,7 +137,7 @@ export async function upsertUser(email: string, googleId: string, name: string) 
     `, [email, googleId, name]);
     return rows;
 }
-
+  
 export async function getLinksByUserEmail(email: string) {
     const { rows } = await pool.query(`
       SELECT sl.* FROM spreadsheet_links sl
@@ -147,7 +147,7 @@ export async function getLinksByUserEmail(email: string) {
     `, [email]);
     return rows;
 }
-
+  
 export async function upsertLink(userId: number, sheetUrl: string, sheetName: string) {
     const { rows } = await pool.query(`
       INSERT INTO spreadsheet_links (user_id, sheet_url, sheet_name)
@@ -158,14 +158,14 @@ export async function upsertLink(userId: number, sheetUrl: string, sheetName: st
     `, [userId, sheetUrl, sheetName]);
     return rows[0];
 }
-
+  
 export async function createLinkHistory(linkId: number, action: string, newValue: string) {
     await pool.query(`
       INSERT INTO link_history (link_id, action, new_value)
       VALUES ($1, $2, $3)
     `, [linkId, action, newValue]);
 }
-
+  
 export async function deleteLinkForUser(linkId: number, email: string) {
     const result = await pool.query(`
       DELETE FROM spreadsheet_links
@@ -174,7 +174,7 @@ export async function deleteLinkForUser(linkId: number, email: string) {
     `, [linkId, email]);
     return result.rowCount;
 }
-
+  
 export async function getLinkForUser(linkId: number, email: string) {
     const { rows } = await pool.query(`
       SELECT sl.* FROM spreadsheet_links sl
@@ -183,7 +183,7 @@ export async function getLinkForUser(linkId: number, email: string) {
     `, [linkId, email]);
     return rows[0];
 }
-
+  
 export async function updateLinkLastAccessed(linkId: number) {
     await pool.query('UPDATE spreadsheet_links SET last_accessed = CURRENT_TIMESTAMP WHERE id = $1', [linkId]);
 }
