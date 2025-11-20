@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     if (!link) {
       return NextResponse.json({ error: 'Link not found' }, { status: 404 });
     }
-
+    
     const cachedData = await getCachedSheetData(linkId);
 
     let todayData = [];
