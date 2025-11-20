@@ -8,6 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AddLinkForm from './add-link-form';
 import LinksList from './links-list';
 import SheetDataViewer from './sheet-data-viewer';
+import { ModeToggle } from './mode-toggle';
+import Link from 'next/link';
 
 export default function Dashboard() {
   const { data: session } = useSession();
@@ -20,51 +22,68 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border sticky top-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Spreadsheet Reader</h1>
-            <p className="text-sm text-muted-foreground">{session?.user?.email}</p>
+      {/* Apple-style Admin Header */}
+      <header className="sticky top-0 z-50 w-full bg-background/70 backdrop-blur-xl border-b border-border/40 supports-[backdrop-filter]:bg-background/60">
+        <div className="max-w-[980px] mx-auto px-4 h-12 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <Link href="/" className="text-sm font-semibold text-foreground hover:opacity-70 transition-opacity">
+                Dashboard
+            </Link>
+            <span className="text-xs text-muted-foreground border-l border-border pl-4 h-4 flex items-center">
+                {session?.user?.email}
+            </span>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => signOut()}
-          >
-            Sign Out
-          </Button>
+          <div className="flex items-center gap-2">
+            <ModeToggle />
+            <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => signOut()}
+                className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+            >
+                Sign Out
+            </Button>
+          </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Tabs defaultValue="links" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="links">My Spreadsheets</TabsTrigger>
-            <TabsTrigger value="add">Add New</TabsTrigger>
-            {selectedLinkId && <TabsTrigger value="view">View Data</TabsTrigger>}
-          </TabsList>
+      <main className="max-w-[980px] mx-auto px-4 py-12">
+        <Tabs defaultValue="links" className="space-y-8">
+          <div className="flex justify-center">
+            <TabsList className="grid w-full max-w-[400px] grid-cols-2 bg-secondary/50 p-1 rounded-full">
+                <TabsTrigger value="links" className="rounded-full text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm">My Spreadsheets</TabsTrigger>
+                <TabsTrigger value="add" className="rounded-full text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm">Add New</TabsTrigger>
+            </TabsList>
+          </div>
+
+          {selectedLinkId && (
+             <div className="flex justify-center -mt-4">
+                <Button variant="link" size="sm" onClick={() => setSelectedLinkId(null)} className="text-xs">
+                    &larr; Back to List
+                </Button>
+             </div>
+          )}
 
           {/* Links Tab */}
-          <TabsContent value="links" className="space-y-4">
-            <LinksList
-              key={refreshKey}
-              onSelectLink={setSelectedLinkId}
-              onRefresh={handleRefresh}
-            />
+          <TabsContent value="links" className="space-y-6 focus-visible:outline-none">
+            {selectedLinkId ? (
+                <SheetDataViewer linkId={selectedLinkId} />
+            ) : (
+                <LinksList
+                  key={refreshKey}
+                  onSelectLink={setSelectedLinkId}
+                  onRefresh={handleRefresh}
+                />
+            )}
           </TabsContent>
 
           {/* Add Link Tab */}
-          <TabsContent value="add">
-            <AddLinkForm onSuccess={handleRefresh} />
+          <TabsContent value="add" className="focus-visible:outline-none">
+            <div className="max-w-xl mx-auto">
+                <AddLinkForm onSuccess={handleRefresh} />
+            </div>
           </TabsContent>
-
-          {/* View Data Tab */}
-          {selectedLinkId && (
-            <TabsContent value="view">
-              <SheetDataViewer linkId={selectedLinkId} />
-            </TabsContent>
-          )}
         </Tabs>
       </main>
     </div>
