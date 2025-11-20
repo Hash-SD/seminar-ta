@@ -17,13 +17,24 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
   const [loading, setLoading] = useState(false);
   const [sheetUrl, setSheetUrl] = useState('');
   const [sheetName, setSheetName] = useState('');
+  const [scheduleType, setScheduleType] = useState('proposal'); // 'proposal' | 'hasil'
+  const [department, setDepartment] = useState(''); // e.g. 'Teknik Informatika'
 
   // Column Mapping State
   const [colNama, setColNama] = useState('');
+  const [labelNama, setLabelNama] = useState('');
+
   const [colJudul, setColJudul] = useState('');
+  const [labelJudul, setLabelJudul] = useState('');
+
   const [colTanggal, setColTanggal] = useState('');
+  const [labelTanggal, setLabelTanggal] = useState('');
+
   const [colJam, setColJam] = useState('');
+  const [labelJam, setLabelJam] = useState('');
+
   const [colRuangan, setColRuangan] = useState('');
+  const [labelRuangan, setLabelRuangan] = useState('');
 
   // Auto Refresh State
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -41,12 +52,14 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
           sheet_url: sheetUrl,
           sheet_name: sheetName,
           configuration: {
+             type: scheduleType,
+             department: department,
              columns: {
-                Nama: colNama,
-                Judul: colJudul,
-                Tanggal: colTanggal,
-                Jam: colJam,
-                Ruangan: colRuangan
+                Nama: { cell: colNama, label: labelNama },
+                Judul: { cell: colJudul, label: labelJudul },
+                Tanggal: { cell: colTanggal, label: labelTanggal },
+                Jam: { cell: colJam, label: labelJam },
+                Ruangan: { cell: colRuangan, label: labelRuangan }
              },
              auto_refresh: autoRefresh,
              refresh_interval: parseInt(refreshInterval)
@@ -66,11 +79,12 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
       // Reset form
       setSheetUrl('');
       setSheetName('');
-      setColNama('');
-      setColJudul('');
-      setColTanggal('');
-      setColJam('');
-      setColRuangan('');
+      setDepartment('');
+      setColNama(''); setLabelNama('');
+      setColJudul(''); setLabelJudul('');
+      setColTanggal(''); setLabelTanggal('');
+      setColJam(''); setLabelJam('');
+      setColRuangan(''); setLabelRuangan('');
       setAutoRefresh(false);
       setRefreshInterval('60');
 
@@ -101,103 +115,125 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
                 onChange={(e) => setSheetUrl(e.target.value)}
                 required
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                Make sure the Google Service Account email is added as Editor/Viewer
-              </p>
             </div>
 
             <div>
-              <Label className="mb-1">Sheet Tab Name</Label>
-              <Input
-                type="text"
-                placeholder="e.g., Sheet1"
-                value={sheetName}
-                onChange={(e) => setSheetName(e.target.value)}
-                required
-              />
-               <p className="text-xs text-muted-foreground mt-1">
-                Can be a single name (e.g., "Sheet1") or multiple separated by comma (e.g., "Sheet1,Sheet2")
-              </p>
+                <Label className="mb-1">Sheet Tab Name</Label>
+                <Input
+                    type="text"
+                    placeholder="e.g., Sheet1"
+                    value={sheetName}
+                    onChange={(e) => setSheetName(e.target.value)}
+                    required
+                />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <Label className="mb-1">Seminar Type</Label>
+                    <Select value={scheduleType} onValueChange={setScheduleType}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select Type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="proposal">Seminar Proposal</SelectItem>
+                            <SelectItem value="hasil">Seminar Hasil</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div>
+                    <Label className="mb-1">Program Studi / Jurusan</Label>
+                    <Input
+                        type="text"
+                        placeholder="e.g. Teknik Informatika"
+                        value={department}
+                        onChange={(e) => setDepartment(e.target.value)}
+                        required
+                    />
+                </div>
             </div>
 
             <div className="flex items-center space-x-2">
                  <Switch id="auto-refresh" checked={autoRefresh} onCheckedChange={setAutoRefresh} />
-                 <Label htmlFor="auto-refresh">Enable Automatic Scheduled Refresh</Label>
+                 <Label htmlFor="auto-refresh">Customize Cache Duration</Label>
             </div>
 
             {autoRefresh && (
                 <div>
-                    <Label className="mb-1">Refresh Interval (Minutes)</Label>
+                    <Label className="mb-1">Cache Duration (Minutes)</Label>
                     <Select value={refreshInterval} onValueChange={setRefreshInterval}>
                         <SelectTrigger>
-                            <SelectValue placeholder="Select interval" />
+                            <SelectValue placeholder="Select duration" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="15">Every 15 Minutes</SelectItem>
-                            <SelectItem value="30">Every 30 Minutes</SelectItem>
-                            <SelectItem value="60">Every 1 Hour</SelectItem>
-                            <SelectItem value="180">Every 3 Hours</SelectItem>
-                            <SelectItem value="360">Every 6 Hours</SelectItem>
+                            <SelectItem value="5">5 Minutes</SelectItem>
+                            <SelectItem value="15">15 Minutes</SelectItem>
+                            <SelectItem value="30">30 Minutes</SelectItem>
+                            <SelectItem value="60">1 Hour</SelectItem>
+                            <SelectItem value="180">3 Hours</SelectItem>
+                            <SelectItem value="360">6 Hours</SelectItem>
                         </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground mt-1">
-                        System will automatically fetch new data at this interval.
-                    </p>
                 </div>
             )}
         </div>
 
         <div className="space-y-4">
-            <h3 className="text-lg font-medium">Column Mapping</h3>
-            <p className="text-sm text-muted-foreground">
-                Enter the exact header name in your spreadsheet for each attribute.
-            </p>
+            <h3 className="text-lg font-medium">Column Mapping (Excel Coordinates)</h3>
+             <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                     <div className="space-y-1">
+                        <Label>Cell for "Nama"</Label>
+                        <Input placeholder="e.g. A1" value={colNama} onChange={(e) => setColNama(e.target.value)} required />
+                     </div>
+                     <div className="space-y-1">
+                        <Label>Custom Label</Label>
+                        <Input placeholder="e.g. Mahasiswa" value={labelNama} onChange={(e) => setLabelNama(e.target.value)} />
+                     </div>
+                </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <Label>Header for "Nama"</Label>
-                    <Input
-                        placeholder="e.g. Nama Mahasiswa"
-                        value={colNama}
-                        onChange={(e) => setColNama(e.target.value)}
-                        required
-                    />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                     <div className="space-y-1">
+                        <Label>Cell for "Judul"</Label>
+                        <Input placeholder="e.g. B1" value={colJudul} onChange={(e) => setColJudul(e.target.value)} required />
+                     </div>
+                     <div className="space-y-1">
+                        <Label>Custom Label</Label>
+                        <Input placeholder="e.g. Topik TA" value={labelJudul} onChange={(e) => setLabelJudul(e.target.value)} />
+                     </div>
                 </div>
-                <div>
-                    <Label>Header for "Judul"</Label>
-                    <Input
-                        placeholder="e.g. Judul TA"
-                        value={colJudul}
-                        onChange={(e) => setColJudul(e.target.value)}
-                        required
-                    />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                     <div className="space-y-1">
+                        <Label>Cell for "Tanggal"</Label>
+                        <Input placeholder="e.g. C1" value={colTanggal} onChange={(e) => setColTanggal(e.target.value)} required />
+                     </div>
+                     <div className="space-y-1">
+                        <Label>Custom Label</Label>
+                        <Input placeholder="e.g. Jadwal" value={labelTanggal} onChange={(e) => setLabelTanggal(e.target.value)} />
+                     </div>
                 </div>
-                 <div>
-                    <Label>Header for "Tanggal"</Label>
-                    <Input
-                        placeholder="e.g. Tanggal Seminar"
-                        value={colTanggal}
-                        onChange={(e) => setColTanggal(e.target.value)}
-                        required
-                    />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                     <div className="space-y-1">
+                        <Label>Cell for "Jam"</Label>
+                        <Input placeholder="e.g. D1" value={colJam} onChange={(e) => setColJam(e.target.value)} required />
+                     </div>
+                     <div className="space-y-1">
+                        <Label>Custom Label</Label>
+                        <Input placeholder="e.g. Waktu" value={labelJam} onChange={(e) => setLabelJam(e.target.value)} />
+                     </div>
                 </div>
-                 <div>
-                    <Label>Header for "Jam"</Label>
-                    <Input
-                        placeholder="e.g. Waktu"
-                        value={colJam}
-                        onChange={(e) => setColJam(e.target.value)}
-                        required
-                    />
-                </div>
-                 <div>
-                    <Label>Header for "Ruangan"</Label>
-                    <Input
-                        placeholder="e.g. Lokasi"
-                        value={colRuangan}
-                        onChange={(e) => setColRuangan(e.target.value)}
-                        required
-                    />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                     <div className="space-y-1">
+                        <Label>Cell for "Ruangan"</Label>
+                        <Input placeholder="e.g. E1" value={colRuangan} onChange={(e) => setColRuangan(e.target.value)} required />
+                     </div>
+                     <div className="space-y-1">
+                        <Label>Custom Label</Label>
+                        <Input placeholder="e.g. Lokasi" value={labelRuangan} onChange={(e) => setLabelRuangan(e.target.value)} />
+                     </div>
                 </div>
             </div>
         </div>

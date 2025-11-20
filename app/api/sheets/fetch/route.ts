@@ -7,6 +7,27 @@ import { filterDataForUpcomingWeek } from '@/lib/date-filter';
 
 export const runtime = 'nodejs';
 
+// Helper to parse cell reference (e.g. A1, C5) -> { col: 0, row: 0 }
+function parseCellReference(cellRef: string): { col: number, row: number } | null {
+    if (!cellRef) return null;
+
+    const match = cellRef.trim().toUpperCase().match(/^([A-Z]+)([0-9]+)$/);
+    if (!match) return null;
+
+    const letter = match[1];
+    const number = parseInt(match[2]);
+
+    let column = 0;
+    for (let i = 0; i < letter.length; i++) {
+        column += (letter.charCodeAt(i) - 64) * Math.pow(26, letter.length - i - 1);
+    }
+
+    return {
+        col: column - 1, // 0-based
+        row: number - 1  // 0-based
+    };
+}
+
 // Helper to fetch data for a specific link
 async function fetchAndProcessLink(link: any) {
     let sheetValues = [];
@@ -41,7 +62,6 @@ async function fetchAndProcessLink(link: any) {
                         range: `${tab}!A:Z`,
                     });
                     if (response.data.values) {
-                        // Naive concat, assumes similar structure or we filter later
                         sheetValues = [...sheetValues, ...response.data.values];
                     }
                  } catch (e) {
@@ -51,8 +71,14 @@ async function fetchAndProcessLink(link: any) {
 
             // Cache the raw data
             if (sheetValues.length > 0) {
-                // Cache for 5 minutes (300 seconds)
-                await cacheSheetData(link.id, sheetValues, 300);
+                const config = link.configuration || {};
+                let ttl = 300;
+
+                if (config.auto_refresh && config.refresh_interval) {
+                    ttl = config.refresh_interval * 60;
+                }
+
+                await cacheSheetData(link.id, sheetValues, ttl);
             }
 
          } catch (fetchError: any) {
@@ -62,45 +88,74 @@ async function fetchAndProcessLink(link: any) {
     }
 
     // Filter and Map Data
-    // Use the configuration to map columns
     const config = link.configuration || {};
     const colMap = config.columns || {};
 
-    // We need to find the index of each mapped column in the header row.
-    if (sheetValues.length === 0) return [];
+    // 1. Parse all cell references to determine indices and Max Header Row
+    const attributes = ['Nama', 'Judul', 'Tanggal', 'Jam', 'Ruangan'];
+    let maxHeaderRow = 0;
+    const mapConfig: any = {};
 
-    // Simple header detection: First row
-    // Find the header row - sometimes it's not the first row?
-    // Let's assume first row for now as per standard.
-    const headers = sheetValues[0].map((h: string) => String(h).trim().toLowerCase());
+    attributes.forEach(attr => {
+        const entry = colMap[attr];
+        let cellRef = '';
+        let label = '';
 
-    // Map config names to indices
-    const indices = {
-        nama: headers.indexOf((colMap.Nama || '').toLowerCase()),
-        judul: headers.indexOf((colMap.Judul || '').toLowerCase()),
-        tanggal: headers.indexOf((colMap.Tanggal || '').toLowerCase()),
-        jam: headers.indexOf((colMap.Jam || '').toLowerCase()),
-        ruangan: headers.indexOf((colMap.Ruangan || '').toLowerCase()),
-    };
+        if (typeof entry === 'object' && entry !== null) {
+             cellRef = entry.cell || '';
+             label = entry.label || '';
+        } else if (typeof entry === 'string') {
+             if (entry.match(/^[A-Z]+$/)) {
+                 cellRef = entry + '1';
+             } else {
+                 cellRef = entry;
+             }
+        }
 
-    // Use the new "Upcoming Week" filter logic
-    // It handles both specific column check (if indices.tanggal !== -1) AND full-row fallback
-    const filteredRows = filterDataForUpcomingWeek(sheetValues.slice(1), indices.tanggal);
+        const parsed = parseCellReference(cellRef);
+        if (parsed) {
+            if (parsed.row > maxHeaderRow) maxHeaderRow = parsed.row;
+            mapConfig[attr] = {
+                colIndex: parsed.col,
+                label: label || attr
+            };
+        } else {
+            mapConfig[attr] = { colIndex: -1, label: attr };
+        }
+    });
 
-    // Map the rows to the standard object structure
-    const mappedData = filteredRows.map((row: any[]) => ({
-        Nama: indices.nama !== -1 ? row[indices.nama] : '',
-        Judul: indices.judul !== -1 ? row[indices.judul] : '',
-        Tanggal: indices.tanggal !== -1 ? row[indices.tanggal] : '',
-        Jam: indices.jam !== -1 ? row[indices.jam] : '',
-        Ruangan: indices.ruangan !== -1 ? row[indices.ruangan] : '',
-    }));
+    // 2. Check if we have enough data
+    if (sheetValues.length <= maxHeaderRow) return [];
+
+    const dataRows = sheetValues.slice(maxHeaderRow + 1);
+
+    // 3. Filter
+    const filteredRows = filterDataForUpcomingWeek(dataRows, mapConfig['Tanggal']?.colIndex);
+
+    // 4. Map
+    const mappedData = filteredRows.map((row: any[]) => {
+        const item: any = {};
+        attributes.forEach(attr => {
+            const idx = mapConfig[attr].colIndex;
+            item[attr] = (idx !== -1 && row[idx]) ? row[idx] : '';
+        });
+
+        item._labels = {};
+        attributes.forEach(attr => {
+             item._labels[attr] = mapConfig[attr].label;
+        });
+
+        // Attach Department and Type from configuration
+        item._department = config.department || 'Umum';
+        item._type = config.type || 'proposal';
+
+        return item;
+    });
 
     return mappedData;
 }
 
 export async function POST(request: NextRequest) {
-  // Admin fetch endpoint
   const session = await getServerSession(authOptions);
   
   if (!session?.user?.email) {
@@ -128,25 +183,24 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Public Endpoint to get all schedule data
 export async function GET(request: NextRequest) {
     try {
         const links = await getAllPublicLinks();
-        let allData: any[] = [];
 
-        for (const link of links) {
-            const data = await fetchAndProcessLink(link);
-            // Add metadata about source
-            const dataWithSource = data.map(item => ({
-                ...item,
-                source: link.sheet_name
-            }));
-            allData = [...allData, ...dataWithSource];
-        }
+        const results = await Promise.all(links.map(async (link) => {
+            try {
+                const data = await fetchAndProcessLink(link);
+                return data.map(item => ({
+                    ...item,
+                    source: link.sheet_name
+                }));
+            } catch (e) {
+                console.error(`Failed to process link ${link.id}`, e);
+                return [];
+            }
+        }));
 
-        // Sort by Date (parsed) to ensure nice ordering?
-        // Or leave it to the frontend. Frontend grouping needs valid dates.
-        // Since we already filtered, we know they are valid-ish dates.
+        const allData = results.flat();
 
         return NextResponse.json({ data: allData, fetchedAt: new Date() });
     } catch (error) {
