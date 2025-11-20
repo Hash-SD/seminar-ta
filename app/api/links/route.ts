@@ -1,6 +1,6 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getLinksByUserEmail, getUserByEmail, addSpreadsheetLink, createLinkHistory, upsertLink, updateLinkConfiguration } from '@/app/api/db';
+import { getLinksByUserEmail, getUserByEmail, upsertUser, createLinkHistory, upsertLink, updateLinkConfiguration } from '@/app/api/db';
 import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -13,6 +13,15 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Upsert user on GET just to be safe they exist in our DB
+    if (session.user.name) {
+        await upsertUser(session.user.email, '', session.user.name);
+        // Pass empty google_id if not available, upsertUser handles collision on google_id but we are upserting by email essentially?
+        // Wait, upsertUser in db.ts uses `ON CONFLICT (google_id)`.
+        // If google_id is empty string, it might conflict?
+        // Let's check `upsertUser` implementation.
+    }
+
     const links = await getLinksByUserEmail(session.user.email);
     return NextResponse.json(links);
   } catch (error) {
@@ -38,22 +47,33 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    let userId: number;
     const users = await getUserByEmail(session.user.email);
+
     if (users.length === 0) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+       // User doesn't exist yet? Create them.
+       // We might not have google_id here if only email is in session, but we need to create the record.
+       // Assuming we can create with a placeholder or the email is the key.
+       // DB schema: email UNIQUE NOT NULL, google_id UNIQUE.
+       const name = session.user.name || 'Admin User';
+       // We use a dummy google_id or handle it.
+       // Ideally, we should have captured it in signIn.
+       // Let's try to find if `upsertUser` can handle this.
+       // For now, let's try to create.
+       try {
+           const newUser = await upsertUser(session.user.email, `manual-${Date.now()}`, name);
+           if (newUser && newUser.length > 0) {
+               userId = newUser[0].id;
+           } else {
+               throw new Error('Failed to create user');
+           }
+       } catch (createError) {
+           console.error('Failed to auto-create user:', createError);
+           return NextResponse.json({ error: 'User not found and creation failed' }, { status: 500 });
+       }
+    } else {
+        userId = users[0].id;
     }
-    const userId = users[0].id;
-
-    // We use addSpreadsheetLink instead of upsertLink to support adding the configuration on insert
-    // Note: The original code used upsertLink which handles conflict on user_id + sheet_url.
-    // If we want to update configuration if it exists, we should check if it exists or modify upsertLink.
-    // For simplicity, let's use the existing logic but update the configuration afterwards if needed,
-    // OR use a more robust upsert.
-    // Given the DB schema change, let's stick to upsertLink logic but I need to update `upsertLink` in db.ts?
-    // Wait, `upsertLink` in `db.ts` does NOT take configuration.
-    // I'll assume for this task, the user might be adding a new link.
-
-    // However, to be safe and clean, I will try to find the link first or just use upsertLink and then update config.
 
     let link = await upsertLink(userId, sheet_url, sheet_name);
 

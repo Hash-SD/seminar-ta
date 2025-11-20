@@ -7,6 +7,17 @@ import { filterDataForUpcomingWeek } from '@/lib/date-filter';
 
 export const runtime = 'nodejs';
 
+// Helper to convert column letter (e.g., 'A', 'AA') to 0-based index
+function columnLetterToIndex(letter: string): number {
+    if (!letter) return -1;
+    let column = 0;
+    const cleanLetter = letter.trim().toUpperCase();
+    for (let i = 0; i < cleanLetter.length; i++) {
+        column += (cleanLetter.charCodeAt(i) - 64) * Math.pow(26, cleanLetter.length - i - 1);
+    }
+    return column - 1;
+}
+
 // Helper to fetch data for a specific link
 async function fetchAndProcessLink(link: any) {
     let sheetValues = [];
@@ -70,45 +81,40 @@ async function fetchAndProcessLink(link: any) {
     }
 
     // Filter and Map Data
-    // Use the configuration to map columns
     const config = link.configuration || {};
     const colMap = config.columns || {};
+    const headerRowIndex = (config.header_row || 1) - 1; // 0-based index
 
-    // We need to find the index of each mapped column in the header row.
-    if (sheetValues.length === 0) return [];
+    if (sheetValues.length <= headerRowIndex) return [];
 
-    // Simple header detection: First row
-    // Find the header row - sometimes it's not the first row?
-    // Let's assume first row for now as per standard.
-    const headers = sheetValues[0].map((h: string) => String(h).trim().toLowerCase());
-
-    // Map config names to indices
+    // Convert mapped Letters (A, B) to Indices (0, 1)
     const indices = {
-        nama: headers.indexOf((colMap.Nama || '').toLowerCase()),
-        judul: headers.indexOf((colMap.Judul || '').toLowerCase()),
-        tanggal: headers.indexOf((colMap.Tanggal || '').toLowerCase()),
-        jam: headers.indexOf((colMap.Jam || '').toLowerCase()),
-        ruangan: headers.indexOf((colMap.Ruangan || '').toLowerCase()),
+        nama: columnLetterToIndex(colMap.Nama),
+        judul: columnLetterToIndex(colMap.Judul),
+        tanggal: columnLetterToIndex(colMap.Tanggal),
+        jam: columnLetterToIndex(colMap.Jam),
+        ruangan: columnLetterToIndex(colMap.Ruangan),
     };
 
+    // Data rows start AFTER the header row
+    const dataRows = sheetValues.slice(headerRowIndex + 1);
+
     // Use the new "Upcoming Week" filter logic
-    // It handles both specific column check (if indices.tanggal !== -1) AND full-row fallback
-    const filteredRows = filterDataForUpcomingWeek(sheetValues.slice(1), indices.tanggal);
+    const filteredRows = filterDataForUpcomingWeek(dataRows, indices.tanggal);
 
     // Map the rows to the standard object structure
     const mappedData = filteredRows.map((row: any[]) => ({
-        Nama: indices.nama !== -1 ? row[indices.nama] : '',
-        Judul: indices.judul !== -1 ? row[indices.judul] : '',
-        Tanggal: indices.tanggal !== -1 ? row[indices.tanggal] : '',
-        Jam: indices.jam !== -1 ? row[indices.jam] : '',
-        Ruangan: indices.ruangan !== -1 ? row[indices.ruangan] : '',
+        Nama: indices.nama !== -1 && row[indices.nama] ? row[indices.nama] : '',
+        Judul: indices.judul !== -1 && row[indices.judul] ? row[indices.judul] : '',
+        Tanggal: indices.tanggal !== -1 && row[indices.tanggal] ? row[indices.tanggal] : '',
+        Jam: indices.jam !== -1 && row[indices.jam] ? row[indices.jam] : '',
+        Ruangan: indices.ruangan !== -1 && row[indices.ruangan] ? row[indices.ruangan] : '',
     }));
 
     return mappedData;
 }
 
 export async function POST(request: NextRequest) {
-  // Admin fetch endpoint
   const session = await getServerSession(authOptions);
   
   if (!session?.user?.email) {
@@ -136,18 +142,13 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Public Endpoint to get all schedule data
 export async function GET(request: NextRequest) {
     try {
         const links = await getAllPublicLinks();
 
-        // Use Promise.all to fetch data concurrently for better performance
-        // Note: Be mindful of Google API rate limits if there are many links not in cache.
-        // Since we cache, it should be fine mostly.
         const results = await Promise.all(links.map(async (link) => {
             try {
                 const data = await fetchAndProcessLink(link);
-                // Add metadata about source
                 return data.map(item => ({
                     ...item,
                     source: link.sheet_name

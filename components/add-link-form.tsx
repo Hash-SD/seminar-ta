@@ -17,8 +17,9 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
   const [loading, setLoading] = useState(false);
   const [sheetUrl, setSheetUrl] = useState('');
   const [sheetName, setSheetName] = useState('');
+  const [headerRow, setHeaderRow] = useState('1');
 
-  // Column Mapping State
+  // Column Mapping State (Now storing Letters e.g., A, B)
   const [colNama, setColNama] = useState('');
   const [colJudul, setColJudul] = useState('');
   const [colTanggal, setColTanggal] = useState('');
@@ -41,6 +42,7 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
           sheet_url: sheetUrl,
           sheet_name: sheetName,
           configuration: {
+             header_row: parseInt(headerRow) || 1,
              columns: {
                 Nama: colNama,
                 Judul: colJudul,
@@ -66,6 +68,7 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
       // Reset form
       setSheetUrl('');
       setSheetName('');
+      setHeaderRow('1');
       setColNama('');
       setColJudul('');
       setColTanggal('');
@@ -106,18 +109,28 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
               </p>
             </div>
 
-            <div>
-              <Label className="mb-1">Sheet Tab Name</Label>
-              <Input
-                type="text"
-                placeholder="e.g., Sheet1"
-                value={sheetName}
-                onChange={(e) => setSheetName(e.target.value)}
-                required
-              />
-               <p className="text-xs text-muted-foreground mt-1">
-                Can be a single name (e.g., "Sheet1") or multiple separated by comma (e.g., "Sheet1,Sheet2")
-              </p>
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <Label className="mb-1">Sheet Tab Name</Label>
+                    <Input
+                        type="text"
+                        placeholder="e.g., Sheet1"
+                        value={sheetName}
+                        onChange={(e) => setSheetName(e.target.value)}
+                        required
+                    />
+                </div>
+                <div>
+                    <Label className="mb-1">Header Row Number</Label>
+                    <Input
+                        type="number"
+                        min="1"
+                        placeholder="1"
+                        value={headerRow}
+                        onChange={(e) => setHeaderRow(e.target.value)}
+                        required
+                    />
+                </div>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -149,52 +162,52 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
         </div>
 
         <div className="space-y-4">
-            <h3 className="text-lg font-medium">Column Mapping</h3>
+            <h3 className="text-lg font-medium">Column Mapping (Excel Format)</h3>
             <p className="text-sm text-muted-foreground">
-                Enter the exact header name in your spreadsheet for each attribute.
+                Enter the Column Letter (e.g., A, B, C) for each attribute.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                    <Label>Header for "Nama"</Label>
+                    <Label>Column for "Nama"</Label>
                     <Input
-                        placeholder="e.g. Nama Mahasiswa"
+                        placeholder="e.g. A"
                         value={colNama}
                         onChange={(e) => setColNama(e.target.value)}
                         required
                     />
                 </div>
                 <div>
-                    <Label>Header for "Judul"</Label>
+                    <Label>Column for "Judul"</Label>
                     <Input
-                        placeholder="e.g. Judul TA"
+                        placeholder="e.g. B"
                         value={colJudul}
                         onChange={(e) => setColJudul(e.target.value)}
                         required
                     />
                 </div>
                  <div>
-                    <Label>Header for "Tanggal"</Label>
+                    <Label>Column for "Tanggal"</Label>
                     <Input
-                        placeholder="e.g. Tanggal Seminar"
+                        placeholder="e.g. C"
                         value={colTanggal}
                         onChange={(e) => setColTanggal(e.target.value)}
                         required
                     />
                 </div>
                  <div>
-                    <Label>Header for "Jam"</Label>
+                    <Label>Column for "Jam"</Label>
                     <Input
-                        placeholder="e.g. Waktu"
+                        placeholder="e.g. D"
                         value={colJam}
                         onChange={(e) => setColJam(e.target.value)}
                         required
                     />
                 </div>
                  <div>
-                    <Label>Header for "Ruangan"</Label>
+                    <Label>Column for "Ruangan"</Label>
                     <Input
-                        placeholder="e.g. Lokasi"
+                        placeholder="e.g. E"
                         value={colRuangan}
                         onChange={(e) => setColRuangan(e.target.value)}
                         required
