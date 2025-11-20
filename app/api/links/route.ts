@@ -1,6 +1,6 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getLinksByUserEmail, getUserByEmail, upsertLink, createLinkHistory } from '@/app/api/db';
+import { getLinksByUserEmail, getUserByEmail, addSpreadsheetLink, createLinkHistory, upsertLink, updateLinkConfiguration } from '@/app/api/db';
 import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { sheet_url, sheet_name } = await request.json();
+  const { sheet_url, sheet_name, configuration } = await request.json();
 
   if (!sheet_url || !sheet_name) {
     return NextResponse.json(
@@ -44,11 +44,26 @@ export async function POST(request: NextRequest) {
     }
     const userId = users[0].id;
 
-    const newLink = await upsertLink(userId, sheet_url, sheet_name);
+    // We use addSpreadsheetLink instead of upsertLink to support adding the configuration on insert
+    // Note: The original code used upsertLink which handles conflict on user_id + sheet_url.
+    // If we want to update configuration if it exists, we should check if it exists or modify upsertLink.
+    // For simplicity, let's use the existing logic but update the configuration afterwards if needed,
+    // OR use a more robust upsert.
+    // Given the DB schema change, let's stick to upsertLink logic but I need to update `upsertLink` in db.ts?
+    // Wait, `upsertLink` in `db.ts` does NOT take configuration.
+    // I'll assume for this task, the user might be adding a new link.
 
-    await createLinkHistory(newLink.id, 'created', sheet_url);
+    // However, to be safe and clean, I will try to find the link first or just use upsertLink and then update config.
 
-    return NextResponse.json(newLink, { status: 201 });
+    let link = await upsertLink(userId, sheet_url, sheet_name);
+
+    if (configuration) {
+        link = await updateLinkConfiguration(link.id, configuration);
+    }
+
+    await createLinkHistory(link.id, 'upsert', sheet_url);
+
+    return NextResponse.json(link, { status: 201 });
   } catch (error) {
     console.error('[v0] Post link error:', error);
     return NextResponse.json({ error: 'Database error' }, { status: 500 });

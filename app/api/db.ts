@@ -45,6 +45,7 @@ export async function initializeDatabase() {
         sheet_url VARCHAR(500) NOT NULL,
         sheet_name VARCHAR(255) NOT NULL,
         sheet_id VARCHAR(100),
+        configuration JSONB,
         last_accessed TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -52,6 +53,17 @@ export async function initializeDatabase() {
       );
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_links_user_id ON spreadsheet_links(user_id);`);
+
+    // Add configuration column if it doesn't exist (migration)
+    await pool.query(`
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='spreadsheet_links' AND column_name='configuration') THEN
+                ALTER TABLE spreadsheet_links ADD COLUMN configuration JSONB;
+            END IF;
+        END
+        $$;
+    `);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sheet_data_cache (
@@ -106,12 +118,26 @@ export async function getSpreadsheetLinks(userId: number) {
     return rows;
 }
 
-export async function addSpreadsheetLink(userId: number, sheetUrl: string, sheetName: string, sheetId?: string) {
+// Helper to get all links for public view (fetching all links from all users)
+export async function getAllPublicLinks() {
+    const { rows } = await pool.query("SELECT * FROM spreadsheet_links ORDER BY updated_at DESC");
+    return rows;
+}
+
+export async function addSpreadsheetLink(userId: number, sheetUrl: string, sheetName: string, sheetId?: string, configuration?: any) {
     const { rows } = await pool.query(
-        "INSERT INTO spreadsheet_links (user_id, sheet_url, sheet_name, sheet_id) VALUES ($1, $2, $3, $4) RETURNING *",
-        [userId, sheetUrl, sheetName, sheetId || null]
+        "INSERT INTO spreadsheet_links (user_id, sheet_url, sheet_name, sheet_id, configuration) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+        [userId, sheetUrl, sheetName, sheetId || null, configuration ? JSON.stringify(configuration) : null]
     );
     return rows;
+}
+
+export async function updateLinkConfiguration(linkId: number, configuration: any) {
+    const { rows } = await pool.query(
+        "UPDATE spreadsheet_links SET configuration = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *",
+        [JSON.stringify(configuration), linkId]
+    );
+    return rows[0];
 }
 
 export async function deleteSpreadsheetLink(linkId: number) {

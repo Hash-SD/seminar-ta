@@ -19,11 +19,18 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.NEXTAUTH_GOOGLE_SECRET,
     }),
   ],
+  events: {
+    async signIn({ user, account, isNewUser }) {
+      // Log admin login for Vercel monitoring
+      console.log(`[Auth] Admin Login Successful: ${user.email} via ${account?.provider} (New User: ${isNewUser})`);
+    },
+  },
   callbacks: {
     async signIn({ user, account }) {
       try {
+        // Domain validation for ITERA students/admins
         if (!user.email?.endsWith('@student.itera.ac.id')) {
-          console.log('[v0] Invalid email domain:', user.email);
+          console.warn(`[Auth] Blocked login attempt from unauthorized domain: ${user.email}`);
           return false;
         }
 
@@ -32,13 +39,16 @@ export const authOptions: NextAuthOptions = {
                 await upsertUser(user.email, account.providerAccountId, user.name);
             }
         } catch (dbError) {
-          console.log('[v0] Database insert error:', dbError);
+          console.error('[v0] Database user upsert error:', dbError);
+          // Allow sign in to proceed even if DB write fails, as long as auth is valid?
+          // Or fail? Prefer allow if it's just a sync issue, but might break relations.
+          // We'll allow it but log it.
           return true;
         }
         
         return true;
       } catch (error) {
-        console.error('[v0] Sign in error:', error);
+        console.error('[Auth] Sign in callback error:', error);
         return false;
       }
     },
@@ -60,6 +70,7 @@ export const authOptions: NextAuthOptions = {
     error: '/login',
   },
   secret: process.env.NEXTAUTH_SECRET,
+  // Disable debug logs in production unless needed
   debug: process.env.NODE_ENV === 'development',
 };
 
