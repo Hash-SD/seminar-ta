@@ -13,15 +13,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Upsert user on GET just to be safe they exist in our DB
-    if (session.user.name) {
-        await upsertUser(session.user.email, '', session.user.name);
-        // Pass empty google_id if not available, upsertUser handles collision on google_id but we are upserting by email essentially?
-        // Wait, upsertUser in db.ts uses `ON CONFLICT (google_id)`.
-        // If google_id is empty string, it might conflict?
-        // Let's check `upsertUser` implementation.
-    }
-
     const links = await getLinksByUserEmail(session.user.email);
     return NextResponse.json(links);
   } catch (error) {
