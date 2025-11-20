@@ -17,8 +17,10 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
   const [loading, setLoading] = useState(false);
   const [sheetUrl, setSheetUrl] = useState('');
   const [sheetName, setSheetName] = useState('');
+  const [scheduleType, setScheduleType] = useState('proposal'); // 'proposal' | 'hasil'
+  const [department, setDepartment] = useState(''); // e.g. 'Teknik Informatika'
 
-  // Column Mapping State (Cell References e.g., A1, C5)
+  // Column Mapping State
   const [colNama, setColNama] = useState('');
   const [labelNama, setLabelNama] = useState('');
 
@@ -50,6 +52,8 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
           sheet_url: sheetUrl,
           sheet_name: sheetName,
           configuration: {
+             type: scheduleType,
+             department: department,
              columns: {
                 Nama: { cell: colNama, label: labelNama },
                 Judul: { cell: colJudul, label: labelJudul },
@@ -75,6 +79,7 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
       // Reset form
       setSheetUrl('');
       setSheetName('');
+      setDepartment('');
       setColNama(''); setLabelNama('');
       setColJudul(''); setLabelJudul('');
       setColTanggal(''); setLabelTanggal('');
@@ -110,9 +115,6 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
                 onChange={(e) => setSheetUrl(e.target.value)}
                 required
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                Make sure the Google Service Account email is added as Editor/Viewer
-              </p>
             </div>
 
             <div>
@@ -124,6 +126,31 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
                     onChange={(e) => setSheetName(e.target.value)}
                     required
                 />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <Label className="mb-1">Seminar Type</Label>
+                    <Select value={scheduleType} onValueChange={setScheduleType}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select Type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="proposal">Seminar Proposal</SelectItem>
+                            <SelectItem value="hasil">Seminar Hasil</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div>
+                    <Label className="mb-1">Program Studi / Jurusan</Label>
+                    <Input
+                        type="text"
+                        placeholder="e.g. Teknik Informatika"
+                        value={department}
+                        onChange={(e) => setDepartment(e.target.value)}
+                        required
+                    />
+                </div>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -147,28 +174,20 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
                             <SelectItem value="360">6 Hours</SelectItem>
                         </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground mt-1">
-                        Data will be cached for this duration before fetching from Google Sheets again.
-                    </p>
                 </div>
             )}
         </div>
 
         <div className="space-y-4">
             <h3 className="text-lg font-medium">Column Mapping (Excel Coordinates)</h3>
-            <p className="text-sm text-muted-foreground">
-                Enter the Header Cell (e.g. <strong>A1, C5</strong>) for each attribute.
-                You can also customize the display label.
-            </p>
-
-            <div className="space-y-4">
+             <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                      <div className="space-y-1">
                         <Label>Cell for "Nama"</Label>
                         <Input placeholder="e.g. A1" value={colNama} onChange={(e) => setColNama(e.target.value)} required />
                      </div>
                      <div className="space-y-1">
-                        <Label>Custom Label (Optional)</Label>
+                        <Label>Custom Label</Label>
                         <Input placeholder="e.g. Mahasiswa" value={labelNama} onChange={(e) => setLabelNama(e.target.value)} />
                      </div>
                 </div>
@@ -179,7 +198,7 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
                         <Input placeholder="e.g. B1" value={colJudul} onChange={(e) => setColJudul(e.target.value)} required />
                      </div>
                      <div className="space-y-1">
-                        <Label>Custom Label (Optional)</Label>
+                        <Label>Custom Label</Label>
                         <Input placeholder="e.g. Topik TA" value={labelJudul} onChange={(e) => setLabelJudul(e.target.value)} />
                      </div>
                 </div>
@@ -190,7 +209,7 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
                         <Input placeholder="e.g. C1" value={colTanggal} onChange={(e) => setColTanggal(e.target.value)} required />
                      </div>
                      <div className="space-y-1">
-                        <Label>Custom Label (Optional)</Label>
+                        <Label>Custom Label</Label>
                         <Input placeholder="e.g. Jadwal" value={labelTanggal} onChange={(e) => setLabelTanggal(e.target.value)} />
                      </div>
                 </div>
@@ -201,7 +220,7 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
                         <Input placeholder="e.g. D1" value={colJam} onChange={(e) => setColJam(e.target.value)} required />
                      </div>
                      <div className="space-y-1">
-                        <Label>Custom Label (Optional)</Label>
+                        <Label>Custom Label</Label>
                         <Input placeholder="e.g. Waktu" value={labelJam} onChange={(e) => setLabelJam(e.target.value)} />
                      </div>
                 </div>
@@ -212,7 +231,7 @@ export default function AddLinkForm({ onSuccess }: AddLinkFormProps) {
                         <Input placeholder="e.g. E1" value={colRuangan} onChange={(e) => setColRuangan(e.target.value)} required />
                      </div>
                      <div className="space-y-1">
-                        <Label>Custom Label (Optional)</Label>
+                        <Label>Custom Label</Label>
                         <Input placeholder="e.g. Lokasi" value={labelRuangan} onChange={(e) => setLabelRuangan(e.target.value)} />
                      </div>
                 </div>

@@ -98,8 +98,6 @@ async function fetchAndProcessLink(link: any) {
 
     attributes.forEach(attr => {
         const entry = colMap[attr];
-        // Entry can be object { cell: "A1", label: "..." } or string "A" (legacy support if needed, but we migrated)
-        // We'll assume new structure or fallback
         let cellRef = '';
         let label = '';
 
@@ -107,9 +105,6 @@ async function fetchAndProcessLink(link: any) {
              cellRef = entry.cell || '';
              label = entry.label || '';
         } else if (typeof entry === 'string') {
-             // Legacy fallback? Or user just entered "A".
-             // If "A" (no number), parseCellReference returns null.
-             // Let's assume if it's just letter, row is 0 (A1).
              if (entry.match(/^[A-Z]+$/)) {
                  cellRef = entry + '1';
              } else {
@@ -122,7 +117,7 @@ async function fetchAndProcessLink(link: any) {
             if (parsed.row > maxHeaderRow) maxHeaderRow = parsed.row;
             mapConfig[attr] = {
                 colIndex: parsed.col,
-                label: label || attr // Default to key if no label
+                label: label || attr
             };
         } else {
             mapConfig[attr] = { colIndex: -1, label: attr };
@@ -130,7 +125,6 @@ async function fetchAndProcessLink(link: any) {
     });
 
     // 2. Check if we have enough data
-    // Data starts AFTER the max header row
     if (sheetValues.length <= maxHeaderRow) return [];
 
     const dataRows = sheetValues.slice(maxHeaderRow + 1);
@@ -145,21 +139,16 @@ async function fetchAndProcessLink(link: any) {
             const idx = mapConfig[attr].colIndex;
             item[attr] = (idx !== -1 && row[idx]) ? row[idx] : '';
         });
-        // Also attach labels metadata?
-        // We return array of objects. We can't attach metadata easily to the array itself in JSON response unless we wrap it.
-        // But `fetchAndProcessLink` returns just the array.
-        // We can embed the label in the object? e.g. `_label_Nama`: "Student".
-        // Or we rely on the API wrapper to provide labels?
-        // Let's add `_labels` property to the first item? No that's messy.
-        // Let's add a hidden property or just rely on the frontend not knowing labels for now?
-        // The requirement was "bisa di custom pembacaannya" (reading can be customized).
-        // The user inputs the Label. We should send it.
-        // Let's attach `_labels` to EVERY item. Redundant but safe.
-        // Or better: The GET response structure can handle it.
+
         item._labels = {};
         attributes.forEach(attr => {
              item._labels[attr] = mapConfig[attr].label;
         });
+
+        // Attach Department and Type from configuration
+        item._department = config.department || 'Umum';
+        item._type = config.type || 'proposal';
+
         return item;
     });
 
