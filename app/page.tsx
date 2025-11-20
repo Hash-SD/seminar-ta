@@ -2,41 +2,60 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { getAllPublicLinks } from '@/app/api/db';
 import PublicScheduleViewer from '@/components/public-schedule-viewer';
+import { ModeToggle } from '@/components/mode-toggle';
 
-export const revalidate = 0; // Disable static caching for this page
+export const revalidate = 0;
 
 export const metadata = {
-  title: 'Jadwal Nonton Seminar',
-  description: 'Jadwal seminar mahasiswa ITERA',
+  title: 'Jadwal Seminar - ITERA',
+  description: 'Jadwal seminar mahasiswa Institut Teknologi Sumatera.',
 };
 
 export default async function HomePage() {
-  // Fetch all public links
-  // In a real scenario, we might want to fetch the data client-side or server-side and pass it.
-  // For now, let's just pass the links to the client component which will fetch the data.
   const links = await getAllPublicLinks();
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-card/95 backdrop-blur sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Jadwal Nonton Seminar</h1>
-            <p className="text-sm text-muted-foreground">Institut Teknologi Sumatera</p>
+      {/* Apple-style Sticky Header */}
+      <header className="sticky top-0 z-50 w-full bg-background/70 backdrop-blur-xl border-b border-border/40 supports-[backdrop-filter]:bg-background/60">
+        <div className="max-w-[980px] mx-auto px-4 h-12 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+             {/* Simple text logo */}
+             <Link href="/" className="text-sm font-medium text-foreground hover:opacity-70 transition-opacity">
+                Jadwal Seminar
+             </Link>
           </div>
-          <Link href="/admin">
-            <Button variant="outline" size="sm">
-              Admin Login
-            </Button>
-          </Link>
+
+          <div className="flex items-center gap-4 text-xs">
+            <Link href="/admin" className="text-muted-foreground hover:text-foreground transition-colors">
+                Admin
+            </Link>
+            <ModeToggle />
+          </div>
         </div>
       </header>
 
+      {/* Hero Section - Minimalist */}
+      <section className="pt-20 pb-16 px-4 text-center max-w-[980px] mx-auto">
+          <h1 className="text-5xl sm:text-6xl font-semibold tracking-tight text-foreground mb-4">
+              Jadwal Seminar.
+          </h1>
+          <p className="text-2xl sm:text-3xl font-medium text-muted-foreground max-w-2xl mx-auto leading-tight">
+              Pantau jadwal terkini mahasiswa ITERA.
+          </p>
+      </section>
+
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-[980px] mx-auto px-4 pb-24">
         <PublicScheduleViewer links={links} />
       </main>
+
+      {/* Footer */}
+      <footer className="bg-secondary/30 py-8 text-center border-t border-border/40">
+          <p className="text-xs text-muted-foreground">
+              Copyright © {new Date().getFullYear()} Institut Teknologi Sumatera. All rights reserved.
+          </p>
+      </footer>
     </div>
   );
 }

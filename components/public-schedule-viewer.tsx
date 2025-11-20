@@ -57,101 +57,106 @@ export default function PublicScheduleViewer({ links }: PublicScheduleViewerProp
 
   if (loading) {
     return (
-        <div className="flex flex-col items-center justify-center py-20 space-y-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-            <p className="text-muted-foreground">Memuat Jadwal Seminar Pekan Ini...</p>
+        <div className="flex flex-col items-center justify-center py-32 space-y-6">
+            <div className="relative">
+                <div className="h-12 w-12 rounded-full border-4 border-muted border-t-foreground animate-spin"></div>
+            </div>
+            <p className="text-sm font-medium text-muted-foreground tracking-wide">Memuat Jadwal...</p>
         </div>
     );
   }
 
   if (data.length === 0) {
     return (
-        <div className="text-center py-20">
-            <CalendarDays className="mx-auto h-16 w-16 text-muted-foreground/50 mb-4" />
-            <h2 className="text-xl font-semibold text-foreground">Tidak ada jadwal seminar dalam 7 hari ke depan</h2>
-            <p className="text-muted-foreground">Silakan cek kembali nanti.</p>
+        <div className="text-center py-32 bg-secondary/30 rounded-3xl border border-border/50 backdrop-blur-sm">
+            <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground/40 mb-4" />
+            <h2 className="text-lg font-semibold text-foreground mb-2">Tidak ada jadwal seminar</h2>
+            <p className="text-sm text-muted-foreground">Tidak ada data untuk 7 hari ke depan.</p>
         </div>
     );
   }
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Cari Mahasiswa, Judul, atau Ruangan..."
-            className="pl-8"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        {lastUpdated && (
-            <span className="text-xs text-muted-foreground">
-                Terakhir update: {lastUpdated.toLocaleTimeString('id-ID')}
-            </span>
-        )}
+      <div className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl py-4 -mx-4 px-4 border-b border-border/40 sm:static sm:bg-transparent sm:backdrop-blur-none sm:border-none sm:p-0 sm:mx-0 transition-all">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="relative w-full sm:w-80 group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-foreground transition-colors" />
+              <Input
+                type="search"
+                placeholder="Cari Mahasiswa, Judul..."
+                className="pl-10 h-10 rounded-xl bg-secondary/50 border-transparent focus:bg-background focus:border-primary/20 focus:ring-4 focus:ring-primary/5 transition-all duration-300"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            {lastUpdated && (
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider bg-secondary/50 px-3 py-1 rounded-full">
+                    Updated: {lastUpdated.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+            )}
+          </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {filteredData.map((item, index) => {
             const labels = item._labels || {};
             return (
-            <Card key={index} className="flex flex-col p-5 hover:shadow-md transition-shadow border-l-4 border-l-primary group">
-                <div className="mb-4">
-                     <div className="flex justify-between items-start mb-2">
-                        <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
-                            {/* Maybe show custom label here if it differs? No, date is date. */}
+            <Card key={index} className="flex flex-col p-6 rounded-2xl border border-border/60 shadow-sm hover:shadow-xl hover:border-border hover:-translate-y-1 transition-all duration-300 bg-card/40 backdrop-blur-md group">
+                <div className="mb-5">
+                     <div className="flex justify-between items-start mb-3">
+                        <span className="inline-flex items-center rounded-full bg-foreground/5 px-2.5 py-1 text-[11px] font-semibold text-foreground backdrop-blur-md">
                             {item.Tanggal}
                         </span>
                      </div>
 
-                    {/* Title Section - Uses 'Judul' */}
+                    {/* Title Section */}
                     <div>
-                         <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                         <span className="text-[10px] uppercase tracking-wider text-muted-foreground/80 font-bold mb-1 block">
                              {labels.Judul || 'Judul'}
                          </span>
-                        <h3 className="font-bold text-lg line-clamp-2 text-primary mb-1 group-hover:text-blue-600 transition-colors" title={item.Judul}>
+                        <h3 className="text-lg font-semibold leading-snug text-foreground mb-1 group-hover:text-blue-600 transition-colors duration-300 line-clamp-2" title={item.Judul}>
                             {item.Judul || 'Tidak Tersedia'}
                         </h3>
                     </div>
 
-                    {/* Name Section - Uses 'Nama' */}
-                    <div className="flex items-center text-sm text-muted-foreground mt-3">
-                        <User className="h-4 w-4 mr-2 shrink-0" />
-                        <div className="flex flex-col">
-                             <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
+                    {/* Name Section */}
+                    <div className="mt-4 flex items-start gap-3">
+                        <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center shrink-0 text-muted-foreground group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                             <User className="h-4 w-4" />
+                        </div>
+                        <div>
+                             <span className="text-[10px] uppercase tracking-wider text-muted-foreground/80 font-bold block mb-0.5">
                                  {labels.Nama || 'Mahasiswa'}
                              </span>
-                             <span className="font-medium text-foreground">{item.Nama}</span>
+                             <span className="text-sm font-medium text-foreground">{item.Nama}</span>
                         </div>
                     </div>
                 </div>
 
-                <div className="mt-auto space-y-3 pt-3 border-t border-border/50">
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div className="flex items-center text-muted-foreground">
-                            <Clock className="h-4 w-4 mr-2 text-blue-500 shrink-0" />
-                            <div className="flex flex-col">
-                                 <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
-                                     {labels.Jam || 'Waktu'}
-                                 </span>
+                <div className="mt-auto pt-4 border-t border-border/40">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                             <span className="text-[10px] uppercase tracking-wider text-muted-foreground/80 font-bold block mb-1">
+                                 {labels.Jam || 'Waktu'}
+                             </span>
+                             <div className="flex items-center gap-1.5 text-foreground/90">
+                                <Clock className="h-3.5 w-3.5 text-blue-500" />
                                 <span>{item.Jam || '-'}</span>
-                            </div>
+                             </div>
                         </div>
-                        <div className="flex items-center text-muted-foreground">
-                            <MapPin className="h-4 w-4 mr-2 text-red-500 shrink-0" />
-                             <div className="flex flex-col">
-                                 <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
-                                     {labels.Ruangan || 'Ruangan'}
-                                 </span>
-                                <span className="font-semibold">{item.Ruangan || '-'}</span>
+                        <div>
+                             <span className="text-[10px] uppercase tracking-wider text-muted-foreground/80 font-bold block mb-1">
+                                 {labels.Ruangan || 'Ruangan'}
+                             </span>
+                             <div className="flex items-center gap-1.5 text-foreground/90">
+                                <MapPin className="h-3.5 w-3.5 text-red-500" />
+                                <span className="font-medium">{item.Ruangan || '-'}</span>
                             </div>
                         </div>
                     </div>
-                    <div className="text-xs text-muted-foreground text-right">
-                        Source: {item.source}
+                    <div className="mt-3 text-[10px] text-muted-foreground text-right font-medium opacity-60">
+                        {item.source}
                     </div>
                 </div>
             </Card>
@@ -159,8 +164,8 @@ export default function PublicScheduleViewer({ links }: PublicScheduleViewerProp
       </div>
 
       {filteredData.length === 0 && searchTerm && (
-          <div className="text-center py-10">
-              <p className="text-muted-foreground">Tidak ditemukan jadwal yang cocok dengan "{searchTerm}"</p>
+          <div className="text-center py-20">
+              <p className="text-muted-foreground text-lg">Tidak ditemukan "{searchTerm}"</p>
           </div>
       )}
     </div>
