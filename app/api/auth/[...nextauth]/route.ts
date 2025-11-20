@@ -1,6 +1,6 @@
 import NextAuth, { type NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
-import { sql } from '@vercel/postgres';
+import { upsertUser } from '@/app/api/db';
 
 if (!process.env.NEXTAUTH_GOOGLE_ID || !process.env.NEXTAUTH_GOOGLE_SECRET) {
   throw new Error('Missing Google OAuth environment variables: NEXTAUTH_GOOGLE_ID and NEXTAUTH_GOOGLE_SECRET');
@@ -9,6 +9,8 @@ if (!process.env.NEXTAUTH_GOOGLE_ID || !process.env.NEXTAUTH_GOOGLE_SECRET) {
 if (!process.env.NEXTAUTH_SECRET) {
   throw new Error('Missing NEXTAUTH_SECRET environment variable');
 }
+
+export const runtime = 'nodejs';
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -26,13 +28,9 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          await sql`
-            INSERT INTO users (email, google_id, name)
-            VALUES (${user.email}, ${account?.providerAccountId}, ${user.name})
-            ON CONFLICT (google_id) DO UPDATE SET 
-            updated_at = CURRENT_TIMESTAMP,
-            name = EXCLUDED.name
-          `;
+            if (user.email && account?.providerAccountId && user.name) {
+                await upsertUser(user.email, account.providerAccountId, user.name);
+            }
         } catch (dbError) {
           console.log('[v0] Database insert error:', dbError);
           return true;
