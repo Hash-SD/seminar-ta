@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import { URL } from "url";
 
 const DATABASE_URL = process.env.POSTGRES_URL;
 
@@ -6,10 +7,19 @@ if (!DATABASE_URL) {
   throw new Error("POSTGRES_URL environment variable is not set.");
 }
 
+// Parse the original URL
+const dbUrl = new URL(DATABASE_URL);
+
+// Remove the `sslmode` query parameter, as it conflicts with the `ssl` object config
+dbUrl.searchParams.delete('sslmode');
+
+// The cleaned connection string
+const cleanedConnectionString = dbUrl.toString();
+
 export const pool = new Pool({
-  connectionString: DATABASE_URL,
+  connectionString: cleanedConnectionString,
   ssl: {
-    rejectUnauthorized: false,
+    rejectUnauthorized: false, // Required for Supabase connections
   },
 });
 
