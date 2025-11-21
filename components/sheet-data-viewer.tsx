@@ -60,10 +60,14 @@ export default function SheetDataViewer({ linkId }: SheetDataViewerProps) {
 
   if (data.length === 0) {
     return (
-      <Card className="p-6">
-        <p className="text-center text-muted-foreground">No data found for the upcoming week (or mapping is incorrect).</p>
-        <Button onClick={fetchData} variant="outline" size="sm" className="mt-4">
-          Retry
+      <Card className="p-6 flex flex-col items-center justify-center space-y-4">
+        <p className="text-center text-muted-foreground">
+           No data found for the upcoming week (or mapping is incorrect).
+           <br />
+           <span className="text-xs">If this is a new link, it might take a few seconds to load.</span>
+        </p>
+        <Button onClick={fetchData} variant="default" size="sm">
+          Try Again / Retry
         </Button>
       </Card>
     );
