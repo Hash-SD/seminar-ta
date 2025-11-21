@@ -6,6 +6,8 @@ import { getUserGoogleSheetsClient, extractSpreadsheetId } from '@/lib/google-sh
 import { filterDataForUpcomingWeek } from '@/lib/date-filter';
 
 export const runtime = 'nodejs';
+// Penting: Set dynamic agar tidak di-cache statis oleh Vercel/Next.js saat build
+export const dynamic = 'force-dynamic';
 
 // Helper to parse cell reference (e.g. A1, C5) -> { col: 0, row: 0 }
 function parseCellReference(cellRef: string): { col: number, row: number } | null {
@@ -32,19 +34,22 @@ function parseCellReference(cellRef: string): { col: number, row: number } | nul
 async function fetchAndProcessLink(link: any, accessToken?: string) {
     let sheetValues = [];
 
-    // Try to get cached data first
+    // 1. CEK CACHE DATABASE
+    // getCachedSheetData query-nya sudah otomatis filter "WHERE expires_at > NOW()"
+    // Jadi jika ada return, berarti cache masih valid/fresh.
     const cachedData = await getCachedSheetData(link.id);
 
     if (cachedData.length > 0) {
+        console.log(`[Cache Hit] Menggunakan data tersimpan untuk link ${link.id}`);
         sheetValues = cachedData[0].data || [];
     } else {
-         // Fetch from Google Sheets using User Token
-         // If accessToken is missing (e.g. public view), try to get refresh token from owner
+         console.log(`[Cache Miss] Fetching live data untuk link ${link.id}`);
+
+         // 2. FETCH DARI GOOGLE (Jika Cache Miss/Expired)
          let client;
          if (accessToken) {
              client = getUserGoogleSheetsClient(accessToken);
          } else {
-             // Fallback for public view: use owner's refresh token
              const refreshToken = await getUserRefreshToken(link.user_id);
              if (refreshToken) {
                  client = getUserGoogleSheetsClient(undefined, refreshToken);
@@ -57,13 +62,9 @@ async function fetchAndProcessLink(link: any, accessToken?: string) {
          }
 
          const spreadsheetId = extractSpreadsheetId(link.sheet_url);
-         if (!spreadsheetId) {
-             console.error('Invalid Google Sheets URL for link', link.id);
-             return [];
-         }
+         if (!spreadsheetId) return [];
 
          try {
-            // Handle multiple tabs if specified in sheet_name (comma separated)
             const sheetTabs = link.sheet_name.split(',').map((s: string) => s.trim());
 
             for (const tab of sheetTabs) {
@@ -80,29 +81,33 @@ async function fetchAndProcessLink(link: any, accessToken?: string) {
                  }
             }
 
-            // Cache the raw data
+            // 3. SIMPAN CACHE BARU
             if (sheetValues.length > 0) {
                 const config = link.configuration || {};
+
+                // Default Cache Time: 5 menit (300 detik) jika tidak diset
+                // Ini cukup cepat untuk user experience, tapi cukup lama agar tidak spam API Google
                 let ttl = 300;
 
-                if (config.auto_refresh && config.refresh_interval) {
-                    ttl = config.refresh_interval * 60;
+                if (config.refresh_interval) {
+                    ttl = config.refresh_interval * 60; // Convert menit ke detik
                 }
 
+                // Kita SELALU cache, tidak peduli auto_refresh true/false
+                // karena ini mekanisme dasar performa aplikasi tanpa Cron
                 await cacheSheetData(link.id, sheetValues, ttl);
             }
 
          } catch (fetchError: any) {
-             console.error('[v0] Google Sheets API error:', fetchError);
+             console.error('[API Error] Google Sheets:', fetchError);
              return [];
          }
     }
 
-    // Filter and Map Data
+    // --- PROSES MAPPING & FILTERING (Sama seperti sebelumnya) ---
     const config = link.configuration || {};
     const colMap = config.columns || {};
 
-    // 1. Parse all cell references to determine indices and Max Header Row
     const attributes = ['Nama', 'Judul', 'Tanggal', 'Jam', 'Ruangan'];
     let maxHeaderRow = 0;
     const mapConfig: any = {};
@@ -135,15 +140,11 @@ async function fetchAndProcessLink(link: any, accessToken?: string) {
         }
     });
 
-    // 2. Check if we have enough data
     if (sheetValues.length <= maxHeaderRow) return [];
 
     const dataRows = sheetValues.slice(maxHeaderRow + 1);
-
-    // 3. Filter
     const filteredRows = filterDataForUpcomingWeek(dataRows, mapConfig['Tanggal']?.colIndex);
 
-    // 4. Map
     const mappedData = filteredRows.map((row: any[]) => {
         const item: any = {};
         attributes.forEach(attr => {
@@ -156,7 +157,6 @@ async function fetchAndProcessLink(link: any, accessToken?: string) {
              item._labels[attr] = mapConfig[attr].label;
         });
 
-        // Attach Department and Type from configuration
         item._department = config.department || 'Umum';
         item._type = config.type || 'proposal';
 
@@ -166,23 +166,22 @@ async function fetchAndProcessLink(link: any, accessToken?: string) {
     return mappedData;
 }
 
+// Endpoint untuk Admin (Preview)
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
-  
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // Get Access Token from session
   // @ts-ignore
   const userAccessToken = session.accessToken;
-
   const { linkId } = await request.json();
 
   try {
       const link = await getLinkForUser(linkId, session.user.email);
       if (!link) return NextResponse.json({ error: 'Link not found' }, { status: 404 });
 
+      // Force fetch live data untuk admin preview (opsional, bisa diubah logicnya)
+      // Di sini kita pakai fungsi yang sama, dia akan cek cache dulu.
+      // Admin bisa tekan tombol "Refresh" di UI yang mentrigger endpoint lain jika mau paksa update.
       const data = await fetchAndProcessLink(link, userAccessToken);
       await updateLinkLastAccessed(linkId);
 
@@ -198,14 +197,15 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Endpoint untuk Public View (Homepage)
 export async function GET(request: NextRequest) {
     try {
         const links = await getAllPublicLinks();
 
+        // Gunakan Promise.all untuk memproses semua link secara PARALEL
+        // Ini penting agar user tidak menunggu terlalu lama jika ada banyak link
         const results = await Promise.all(links.map(async (link) => {
             try {
-                // For public GET, we don't have a session access token.
-                // fetchAndProcessLink handles fallback to owner's refresh token inside.
                 const data = await fetchAndProcessLink(link);
                 return data.map(item => ({
                     ...item,
@@ -219,7 +219,11 @@ export async function GET(request: NextRequest) {
 
         const allData = results.flat();
 
-        return NextResponse.json({ data: allData, fetchedAt: new Date() });
+        return NextResponse.json({
+            data: allData,
+            fetchedAt: new Date(),
+            cached: true // Indikator bahwa sistem caching aktif
+        });
     } catch (error) {
         console.error('Public fetch error:', error);
         return NextResponse.json({ error: 'Failed to fetch public data' }, { status: 500 });

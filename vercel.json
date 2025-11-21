@@ -1,8 +1,3 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/update-data",
-      "schedule": "*/10 * * * *"
-    }
-  ]
+  "//": "Cron jobs removed. We use on-demand caching now."
 }
