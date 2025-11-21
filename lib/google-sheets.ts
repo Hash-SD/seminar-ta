@@ -3,11 +3,12 @@ import { OAuth2Client } from 'google-auth-library';
 
 // Helper to create a Sheets client using User Tokens (Delegation)
 export const getUserGoogleSheetsClient = (accessToken?: string, refreshToken?: string) => {
-  const clientId = process.env.NEXTAUTH_GOOGLE_ID;
-  const clientSecret = process.env.NEXTAUTH_GOOGLE_SECRET;
+  // Support both naming conventions
+  const clientId = process.env.NEXTAUTH_GOOGLE_ID || process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.NEXTAUTH_GOOGLE_SECRET || process.env.GOOGLE_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    console.error('FATAL: Google OAuth Credentials (ID/Secret) are missing in .env');
+    console.error('FATAL: Google OAuth Credentials missing. Check .env for GOOGLE_CLIENT_ID / NEXTAUTH_GOOGLE_ID');
     return null;
   }
 
@@ -27,13 +28,6 @@ export const getUserGoogleSheetsClient = (accessToken?: string, refreshToken?: s
   }
 
   return google.sheets({ version: 'v4', auth });
-};
-
-// Deprecated: Old Service Account implementation (kept for reference if needed, but unused)
-export const getGoogleSheetsClient = () => {
-    // Redirect to new implementation with null tokens (will fail safely) or remove entirely.
-    // For now, let's just rely on the new function.
-    return null;
 };
 
 export const extractSpreadsheetId = (url: string): string | null => {

@@ -2,8 +2,12 @@ import NextAuth, { type NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import { upsertUser, storeUserToken } from '@/app/api/db';
 
-if (!process.env.NEXTAUTH_GOOGLE_ID || !process.env.NEXTAUTH_GOOGLE_SECRET) {
-  throw new Error('Missing Google OAuth environment variables: NEXTAUTH_GOOGLE_ID and NEXTAUTH_GOOGLE_SECRET');
+// Support both naming conventions for robustness
+const googleClientId = process.env.NEXTAUTH_GOOGLE_ID || process.env.GOOGLE_CLIENT_ID;
+const googleClientSecret = process.env.NEXTAUTH_GOOGLE_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+
+if (!googleClientId || !googleClientSecret) {
+  throw new Error('Missing Google OAuth environment variables: NEXTAUTH_GOOGLE_ID / GOOGLE_CLIENT_ID');
 }
 
 if (!process.env.NEXTAUTH_SECRET) {
@@ -15,8 +19,8 @@ export const runtime = 'nodejs';
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
-      clientId: process.env.NEXTAUTH_GOOGLE_ID,
-      clientSecret: process.env.NEXTAUTH_GOOGLE_SECRET,
+      clientId: googleClientId,
+      clientSecret: googleClientSecret,
       authorization: {
         params: {
           // Request offline access to get a refresh token, and read-only access to spreadsheets
