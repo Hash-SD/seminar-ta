@@ -1,6 +1,6 @@
 import NextAuth, { type NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
-import { upsertUser } from '@/app/api/db';
+import { upsertUser, storeUserToken } from '@/app/api/db';
 
 if (!process.env.NEXTAUTH_GOOGLE_ID || !process.env.NEXTAUTH_GOOGLE_SECRET) {
   throw new Error('Missing Google OAuth environment variables: NEXTAUTH_GOOGLE_ID and NEXTAUTH_GOOGLE_SECRET');
@@ -17,6 +17,15 @@ export const authOptions: NextAuthOptions = {
     GoogleProvider({
       clientId: process.env.NEXTAUTH_GOOGLE_ID,
       clientSecret: process.env.NEXTAUTH_GOOGLE_SECRET,
+      authorization: {
+        params: {
+          // Request offline access to get a refresh token, and read-only access to spreadsheets
+          access_type: "offline",
+          prompt: "consent",
+          response_type: "code",
+          scope: "openid email profile https://www.googleapis.com/auth/spreadsheets.readonly"
+        }
+      }
     }),
   ],
   events: {
@@ -29,20 +38,24 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user, account }) {
       try {
         // Domain validation for ITERA students/admins
-        if (!user.email?.endsWith('@student.itera.ac.id')) {
+        if (!user.email?.endsWith('@student.itera.ac.id') && !user.email?.endsWith('@itera.ac.id')) {
           console.warn(`[Auth] Blocked login attempt from unauthorized domain: ${user.email}`);
           return false;
         }
 
         try {
             if (user.email && account?.providerAccountId && user.name) {
-                await upsertUser(user.email, account.providerAccountId, user.name);
+                // Upsert user basic info
+                const dbUser = await upsertUser(user.email, account.providerAccountId, user.name);
+
+                // Save Refresh Token if present (Google sends it only on first login/consent)
+                if (account.refresh_token && dbUser && dbUser[0]) {
+                    await storeUserToken(dbUser[0].id, account.refresh_token);
+                }
             }
         } catch (dbError) {
           console.error('[v0] Database user upsert error:', dbError);
-          // Allow sign in to proceed even if DB write fails, as long as auth is valid?
-          // Or fail? Prefer allow if it's just a sync issue, but might break relations.
-          // We'll allow it but log it.
+          // Allow sign in to proceed even if DB write fails, but log it.
           return true;
         }
         
@@ -52,15 +65,19 @@ export const authOptions: NextAuthOptions = {
         return false;
       }
     },
-    async jwt({ token, user }) {
-      if (user) {
-        token.email = user.email;
+    async jwt({ token, account }) {
+      // Persist access token to the token object
+      if (account) {
+        token.accessToken = account.access_token;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.email = token.email as string;
+        // Pass access token to the client session
+        // @ts-ignore
+        session.accessToken = token.accessToken;
       }
       return session;
     },
