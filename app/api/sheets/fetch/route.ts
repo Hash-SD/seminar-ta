@@ -1,8 +1,8 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getLinkForUser, getCachedSheetData, updateLinkLastAccessed, cacheSheetData, getAllPublicLinks } from '@/app/api/db';
+import { getLinkForUser, getCachedSheetData, updateLinkLastAccessed, cacheSheetData, getAllPublicLinks, getUserRefreshToken } from '@/app/api/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { getGoogleSheetsClient, extractSpreadsheetId } from '@/lib/google-sheets';
+import { getUserGoogleSheetsClient, extractSpreadsheetId } from '@/lib/google-sheets';
 import { filterDataForUpcomingWeek } from '@/lib/date-filter';
 
 export const runtime = 'nodejs';
@@ -29,7 +29,7 @@ function parseCellReference(cellRef: string): { col: number, row: number } | nul
 }
 
 // Helper to fetch data for a specific link
-async function fetchAndProcessLink(link: any) {
+async function fetchAndProcessLink(link: any, accessToken?: string) {
     let sheetValues = [];
 
     // Try to get cached data first
@@ -38,10 +38,21 @@ async function fetchAndProcessLink(link: any) {
     if (cachedData.length > 0) {
         sheetValues = cachedData[0].data || [];
     } else {
-         // Fetch from Google Sheets
-         const sheets = getGoogleSheetsClient();
-         if (!sheets) {
-              console.error('Google Sheets configuration missing');
+         // Fetch from Google Sheets using User Token
+         // If accessToken is missing (e.g. public view), try to get refresh token from owner
+         let client;
+         if (accessToken) {
+             client = getUserGoogleSheetsClient(accessToken);
+         } else {
+             // Fallback for public view: use owner's refresh token
+             const refreshToken = await getUserRefreshToken(link.user_id);
+             if (refreshToken) {
+                 client = getUserGoogleSheetsClient(undefined, refreshToken);
+             }
+         }
+
+         if (!client) {
+              console.error('Google Sheets client unavailable - Token missing or invalid');
               return [];
          }
 
@@ -57,7 +68,7 @@ async function fetchAndProcessLink(link: any) {
 
             for (const tab of sheetTabs) {
                  try {
-                    const response = await sheets.spreadsheets.values.get({
+                    const response = await client.spreadsheets.values.get({
                         spreadsheetId,
                         range: `${tab}!A:Z`,
                     });
@@ -162,13 +173,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Get Access Token from session
+  // @ts-ignore
+  const userAccessToken = session.accessToken;
+
   const { linkId } = await request.json();
 
   try {
       const link = await getLinkForUser(linkId, session.user.email);
       if (!link) return NextResponse.json({ error: 'Link not found' }, { status: 404 });
 
-      const data = await fetchAndProcessLink(link);
+      const data = await fetchAndProcessLink(link, userAccessToken);
       await updateLinkLastAccessed(linkId);
 
       return NextResponse.json({
@@ -189,6 +204,8 @@ export async function GET(request: NextRequest) {
 
         const results = await Promise.all(links.map(async (link) => {
             try {
+                // For public GET, we don't have a session access token.
+                // fetchAndProcessLink handles fallback to owner's refresh token inside.
                 const data = await fetchAndProcessLink(link);
                 return data.map(item => ({
                     ...item,

@@ -1,25 +1,39 @@
 import { google } from 'googleapis';
+import { OAuth2Client } from 'google-auth-library';
 
-export const getGoogleSheetsClient = () => {
-  const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
-  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+// Helper to create a Sheets client using User Tokens (Delegation)
+export const getUserGoogleSheetsClient = (accessToken?: string, refreshToken?: string) => {
+  const clientId = process.env.NEXTAUTH_GOOGLE_ID;
+  const clientSecret = process.env.NEXTAUTH_GOOGLE_SECRET;
 
-  if (!clientEmail || !privateKey) {
-    console.error('Google Service Account credentials are missing. Please set GOOGLE_CLIENT_EMAIL and GOOGLE_PRIVATE_KEY.');
-    // Return null or throw? If we throw, the app might crash if envs are missing.
-    // But for this feature, it's critical.
+  if (!clientId || !clientSecret) {
+    console.error('FATAL: Google OAuth Credentials (ID/Secret) are missing in .env');
     return null;
   }
 
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      client_email: clientEmail,
-      private_key: privateKey,
-    },
-    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-  });
+  const auth = new google.auth.OAuth2(clientId, clientSecret);
+
+  // Scenario 1: Refresh Token available (e.g., Cron Job / Background process)
+  // The googleapis library will automatically swap refresh_token for a new access_token
+  if (refreshToken) {
+    auth.setCredentials({ refresh_token: refreshToken });
+  }
+  // Scenario 2: Access Token available (e.g., active user session)
+  else if (accessToken) {
+    auth.setCredentials({ access_token: accessToken });
+  } else {
+    console.error('Failed to create client: No token provided');
+    return null;
+  }
 
   return google.sheets({ version: 'v4', auth });
+};
+
+// Deprecated: Old Service Account implementation (kept for reference if needed, but unused)
+export const getGoogleSheetsClient = () => {
+    // Redirect to new implementation with null tokens (will fail safely) or remove entirely.
+    // For now, let's just rely on the new function.
+    return null;
 };
 
 export const extractSpreadsheetId = (url: string): string | null => {

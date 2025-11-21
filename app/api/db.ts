@@ -31,12 +31,24 @@ export async function initializeDatabase() {
         email VARCHAR(255) UNIQUE NOT NULL,
         google_id VARCHAR(255) UNIQUE,
         name VARCHAR(255),
+        refresh_token TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);`);
+
+    // Migration script (if table user already exists)
+    await pool.query(`
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='refresh_token') THEN
+                ALTER TABLE users ADD COLUMN refresh_token TEXT;
+            END IF;
+        END
+        $$;
+    `);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS spreadsheet_links (
@@ -173,6 +185,18 @@ export async function upsertUser(email: string, googleId: string, name: string) 
     `, [email, googleId, name]);
     return rows;
 }
+
+export async function storeUserToken(userId: number, refreshToken: string) {
+    await pool.query(
+        "UPDATE users SET refresh_token = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+        [refreshToken, userId]
+    );
+}
+
+export async function getUserRefreshToken(userId: number) {
+    const { rows } = await pool.query("SELECT refresh_token FROM users WHERE id = $1", [userId]);
+    return rows[0]?.refresh_token;
+}
   
 export async function getLinksByUserEmail(email: string) {
     const { rows } = await pool.query(`
@@ -203,12 +227,49 @@ export async function createLinkHistory(linkId: number, action: string, newValue
 }
   
 export async function deleteLinkForUser(linkId: number, email: string) {
-    const result = await pool.query(`
-      DELETE FROM spreadsheet_links
-      WHERE id = $1 AND user_id = (SELECT id FROM users WHERE email = $2)
-      RETURNING id
-    `, [linkId, email]);
-    return result.rowCount;
+    // 1. Ambil satu koneksi khusus dari pool (Client)
+    const client = await pool.connect();
+
+    try {
+        // 2. Mulai Transaksi pada koneksi tersebut
+        await client.query('BEGIN');
+
+        // Cek kepemilikan link (Security Check)
+        const checkOwner = await client.query(`
+            SELECT id FROM spreadsheet_links
+            WHERE id = $1 AND user_id = (SELECT id FROM users WHERE email = $2)
+        `, [linkId, email]);
+
+        if (checkOwner.rowCount === 0) {
+            throw new Error('Unauthorized or Link not found');
+        }
+
+        // Hapus data dependen (history & cache) terlebih dahulu
+        // Note: Sebenarnya "ON DELETE CASCADE" di schema DB menangani ini,
+        // tapi manual delete lebih aman jika CASCADE tidak ter-set.
+        await client.query('DELETE FROM link_history WHERE link_id = $1', [linkId]);
+        await client.query('DELETE FROM sheet_data_cache WHERE link_id = $1', [linkId]);
+
+        // Hapus link utama
+        const result = await client.query(`
+            DELETE FROM spreadsheet_links
+            WHERE id = $1
+            RETURNING id
+        `, [linkId]);
+
+        // 3. Commit perubahan jika semua berhasil
+        await client.query('COMMIT');
+        return result.rowCount;
+
+    } catch (error) {
+        // 4. Rollback jika ada error, data kembali seperti semula
+        await client.query('ROLLBACK');
+        console.error('[DB Transaction] Delete failed:', error);
+        throw error;
+    } finally {
+        // 5. Wajib lepaskan koneksi kembali ke pool
+        client.release();
+    }
 }
   
 export async function getLinkForUser(linkId: number, email: string) {
