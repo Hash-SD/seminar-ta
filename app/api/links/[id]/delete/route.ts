@@ -7,7 +7,8 @@ export const runtime = 'nodejs';
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  // Ubah tipe params menjadi Promise
+  { params }: { params: Promise<{ id: string }> } 
 ) {
   const session = await getServerSession(authOptions);
   
@@ -15,7 +16,11 @@ export async function DELETE(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const linkId = parseInt(params.id, 10);
+  // Await params terlebih dahulu
+  const { id } = await params; 
+
+  const linkId = parseInt(id, 10);
+  
   if (isNaN(linkId)) {
     return NextResponse.json({ error: 'Invalid link ID' }, { status: 400 });
   }
