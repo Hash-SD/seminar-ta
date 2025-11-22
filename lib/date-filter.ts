@@ -1,75 +1,127 @@
 import { parse, isValid, addDays, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { id } from 'date-fns/locale';
 
-// Helper to parse various date formats commonly used in Indonesia
-// Returns a Date object or null if invalid
-export function parseFlexibleDate(dateStr: string): Date | null {
-  if (!dateStr || typeof dateStr !== 'string') return null;
+/**
+ * Parsing tanggal "Omnivora" - Memakan segala jenis format.
+ */
+export function parseFlexibleDate(dateInput: string | number | any): Date | null {
+  if (!dateInput) return null;
 
-  const cleanStr = dateStr.trim().toLowerCase()
-    .replace(/pukul/g, '')
-    .replace(/wib/g, '')
-    .replace(/wita/g, '')
-    .replace(/wit/g, '')
-    .trim();
-
-  // List of formats to try
-  const formats = [
-    'dd/MM/yyyy',      // 20/11/2025
-    'yyyy-MM-dd',      // 2025-11-20
-    'd MMMM yyyy',     // 17 November 2025
-    'dd MMMM yyyy',    // 17 November 2025
-    'EEEE, d MMMM yyyy', // Senin, 17 November 2025
-    'EEEE, dd MMMM yyyy', // Senin, 17 November 2025
-    'd MMM yyyy',      // 17 Nov 2025
-    'dd MMM yyyy',     // 17 Nov 2025
-    'dd-MM-yyyy',      // 20-11-2025
-  ];
-
-  // Try parsing strictly first
-  for (const fmt of formats) {
-    const d = parse(cleanStr, fmt, new Date(), { locale: id });
-    if (isValid(d)) return d;
+  // 1. HANDLE EXCEL SERIAL NUMBER
+  // Jika input berupa angka (misal: 45617), konversi ke Date JS
+  // (Excel base date: Dec 30, 1899)
+  if (typeof dateInput === 'number') {
+      return new Date(Math.round((dateInput - 25569) * 86400 * 1000));
   }
 
-  // Try English fallback just in case
-  const dEng = new Date(cleanStr);
-  if (isValid(dEng)) return dEng;
+  let str = String(dateInput).trim().toLowerCase();
+
+  // 2. CLEANING (Pembersihan Noise)
+  // Hapus nama hari (Indonesia & Inggris) karena sering typo & tidak butuh untuk parsing tanggal
+  const noiseWords = [
+      'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'jum\'at', 'sabtu', 'minggu',
+      'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+      'pukul', 'jam', 'wib', 'wita', 'wit'
+  ];
+  
+  noiseWords.forEach(word => {
+      // Replace kata utuh saja
+      const regex = new RegExp(`\\b${word}\\b`, 'g');
+      str = str.replace(regex, '');
+  });
+
+  // Normalisasi karakter pemisah
+  str = str
+    .replace(/[,]/g, '')        // Hapus koma
+    .replace(/[.-]/g, '/')      // Ubah titik (.) dan strip (-) jadi slash (/)
+    .replace(/\s+/g, ' ')       // Ubah spasi ganda jadi satu spasi
+    .trim();
+
+  // Contoh transformasi sejauh ini:
+  // "Jumat, 21-11-2025 Pukul 13.00" -> "21/11/2025 13/00"
+  // "03.01.25" -> "03/01/25"
+
+  // 3. DAFTAR FORMAT (Prioritas)
+  // date-fns tokens: d (hari), M (bulan angka), MMM (bulan nama), y (tahun), yy (tahun 2 digit)
+  const formats = [
+    // Format Angka
+    'd/M/yyyy',       // 21/11/2025, 3/1/2025
+    'd/M/yy',         // 21/11/25, 03/01/25
+    'yyyy/M/d',       // 2025/11/21 (ISO like)
+    
+    // Format Teks (Indonesia) - Perhatikan 'str' sudah dinormalisasi jadi spasi/slash
+    'd MMMM yyyy',    // 21 november 2025
+    'd MMM yyyy',     // 21 nov 2025
+    'd MMMM yy',      // 21 november 25
+    
+    // Format Campuran (jika normalisasi slash gagal di spasi)
+    'd MMMM yyyy HH:mm', 
+    'd/M/yyyy HH:mm',
+  ];
+
+  // 4. EKSEKUSI PARSING
+  for (const fmt of formats) {
+    // Gunakan locale Indonesia agar 'Agustus', 'Desember' terbaca
+    const d = parse(str.split(' ')[0], fmt, new Date(), { locale: id });
+    
+    // Jika gagal, coba parse string utuh (mungkin ada jam yang nempel)
+    if (!isValid(d)) {
+        const dFull = parse(str, fmt, new Date(), { locale: id });
+        if (isValid(dFull) && isYearReasonable(dFull)) return dFull;
+    } else if (isYearReasonable(d)) {
+        return d;
+    }
+  }
+
+  // 5. FALLBACK TERAKHIR (Native JS Date)
+  // Bagus untuk format Inggris standard (e.g. "2025-01-03")
+  const dNative = new Date(dateInput);
+  if (isValid(dNative) && isYearReasonable(dNative)) return dNative;
 
   return null;
 }
 
+// Helper validasi tahun (mencegah angka acak dianggap tahun)
+function isYearReasonable(d: Date): boolean {
+    const year = d.getFullYear();
+    return year > 2020 && year < 2030; // Sesuaikan range TA (misal 2020-2030)
+}
+
 /**
- * Filters data rows to include only dates within the next 7 days (inclusive of today).
- * If no specific date column is provided/mapped, it searches the whole row for a valid date match.
+ * Filter data untuk 7 hari ke depan + hari ini.
+ * Mencari tanggal secara otomatis di semua kolom jika tidak dimapping.
  */
 export function filterDataForUpcomingWeek(data: any[], dateColumnIndex: number = -1): any[] {
   const today = startOfDay(new Date());
-  const nextWeek = endOfDay(addDays(today, 7)); // 7 days range
+  const nextWeek = endOfDay(addDays(today, 7));
 
   return data.filter(row => {
     let rowDate: Date | null = null;
 
-    // Case 1: Date column is known (Mapped)
-    if (dateColumnIndex !== -1 && row[dateColumnIndex]) {
-      rowDate = parseFlexibleDate(String(row[dateColumnIndex]));
+    // Opsi 1: Kolom Tanggal sudah ditentukan (Mapping)
+    if (dateColumnIndex !== -1) {
+        // Cek kolom tersebut, atau kolom sekitarnya (kadang user salah hitung index 0-based)
+        const val = row[dateColumnIndex];
+        rowDate = parseFlexibleDate(val);
     }
 
-    // Case 2: No specific column, search whole row for ANY valid date in range
+    // Opsi 2: Auto-Detect (Cari di semua sel baris ini)
+    // Jika Opsi 1 gagal atau null, kita cari "brute force" di baris tersebut
     if (!rowDate) {
-      // This is expensive but robust if mapping is wrong
       const cells = Array.isArray(row) ? row : Object.values(row);
       for (const cell of cells) {
-        const d = parseFlexibleDate(String(cell));
+        const d = parseFlexibleDate(cell);
+        // Kita hanya ambil jika tanggalnya MASUK AKAL (ada dalam range filter)
+        // Ini untuk menghindari salah deteksi angka "1" sebagai tanggal "1900-01-01" dsb
         if (d && isWithinInterval(d, { start: today, end: nextWeek })) {
           rowDate = d;
-          break;
+          break; 
         }
       }
     }
 
+    // Final Check
     if (rowDate) {
-      // Check if within range
       return isWithinInterval(rowDate, { start: today, end: nextWeek });
     }
 
@@ -77,16 +129,6 @@ export function filterDataForUpcomingWeek(data: any[], dateColumnIndex: number =
   });
 }
 
-// Kept for backward compatibility if needed, but updated to use parser
 export function filterDataForToday(data: any[]): any[] {
-  const today = startOfDay(new Date());
-  const endOfToday = endOfDay(new Date());
-
-  return data.filter(row => {
-     const cells = Array.isArray(row) ? row : Object.values(row);
-     return cells.some(cell => {
-         const d = parseFlexibleDate(String(cell));
-         return d && isWithinInterval(d, { start: today, end: endOfToday });
-     });
-  });
+    return filterDataForUpcomingWeek(data); 
 }
